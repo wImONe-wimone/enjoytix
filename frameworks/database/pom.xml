@@ -11,4 +11,16 @@
     </parent>
 
     <artifactId>enjoytix-database</artifactId>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-boot-starter</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.wimone.enjoytix</groupId>
+            <artifactId>enjoytix-distributed-id</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+    </dependencies>
 </project>

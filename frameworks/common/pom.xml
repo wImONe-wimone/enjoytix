@@ -11,4 +11,16 @@
     </parent>
 
     <artifactId>enjoytix-common</artifactId>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.wimone.enjoytix</groupId>
+            <artifactId>enjoytix-convention</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>cn.hutool</groupId>
+            <artifactId>hutool-all</artifactId>
+        </dependency>
+    </dependencies>
 </project>
