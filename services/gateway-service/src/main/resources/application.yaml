@@ -1,0 +1,78 @@
+server:
+  port: 9000
+
+spring:
+  application:
+    name: enjoytix-gateway-service
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848
+      config:
+        server-addr: ${spring.cloud.nacos.discovery.server-addr}
+        import-check:
+          enabled: false
+    sentinel:
+      transport:
+        dashboard: 127.0.0.1:8686
+        port: 8719
+    gateway:
+      routes:
+        - id: enjoytix-user-service
+          uri: lb://enjoytix-user-service
+          predicates:
+            - Path=/api/user/**
+          filters:
+            - name: TokenValidate
+              args:
+                blackPathPre:
+                  - /api/user/me
+                  - /api/user/attendees
+                  - /api/user/logout
+        - id: enjoytix-performance-service
+          uri: lb://enjoytix-performance-service
+          predicates:
+            - Path=/api/performance/**,/api/show/**,/api/venue/**
+        - id: enjoytix-ticket-service
+          uri: lb://enjoytix-ticket-service
+          predicates:
+            - Path=/api/ticket/**
+          filters:
+            - name: TokenValidate
+              args:
+                blackPathPre:
+                  - /api/ticket/lock
+                  - /api/ticket/release
+                  - /api/ticket/issue
+        - id: enjoytix-order-service
+          uri: lb://enjoytix-order-service
+          predicates:
+            - Path=/api/order/**
+          filters:
+            - name: TokenValidate
+              args:
+                blackPathPre:
+                  - /api/order
+        - id: enjoytix-pay-service
+          uri: lb://enjoytix-pay-service
+          predicates:
+            - Path=/api/pay/**,/api/refund/**
+          filters:
+            - name: TokenValidate
+              args:
+                blackPathPre:
+                  - /api/pay
+                  - /api/refund
+        - id: enjoytix-marketing-service
+          uri: lb://enjoytix-marketing-service
+          predicates:
+            - Path=/api/marketing/**
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  metrics:
+    tags:
+      application: ${spring.application.name}
