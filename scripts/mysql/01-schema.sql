@@ -279,6 +279,25 @@ CREATE TABLE IF NOT EXISTS `et_order_status_log` (
     KEY `idx_order_status_log_order_id` (`order_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='order status log';
 
+CREATE TABLE IF NOT EXISTS `et_order_timeout_message_log` (
+    `id` BIGINT NOT NULL,
+    `message_key` VARCHAR(128) NOT NULL,
+    `order_id` BIGINT NOT NULL,
+    `lock_id` BIGINT NOT NULL,
+    `expire_time` DATETIME(3) NOT NULL,
+    `status` VARCHAR(32) NOT NULL,
+    `retry_count` INT NOT NULL DEFAULT 0,
+    `last_error` VARCHAR(512) DEFAULT NULL,
+    `consume_time` DATETIME(3) DEFAULT NULL,
+    `create_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `update_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    `del_flag` TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_order_timeout_message_key` (`message_key`),
+    KEY `idx_order_timeout_message_order_id` (`order_id`),
+    KEY `idx_order_timeout_message_status_expire` (`status`, `expire_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='order timeout message consume log';
+
 USE `enjoytix_pay`;
 
 CREATE TABLE IF NOT EXISTS `et_pay_order` (

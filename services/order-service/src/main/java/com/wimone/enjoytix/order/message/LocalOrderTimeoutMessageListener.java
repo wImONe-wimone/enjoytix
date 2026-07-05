@@ -1,20 +1,21 @@
 package com.wimone.enjoytix.order.message;
 
-import com.wimone.enjoytix.order.service.OrderTimeoutCloseService;
+import org.springframework.context.annotation.Profile;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 @Component
+@Profile("test")
 public class LocalOrderTimeoutMessageListener {
 
-    private final OrderTimeoutCloseService orderTimeoutCloseService;
+    private final OrderTimeoutMessageProcessor processor;
 
-    public LocalOrderTimeoutMessageListener(OrderTimeoutCloseService orderTimeoutCloseService) {
-        this.orderTimeoutCloseService = orderTimeoutCloseService;
+    public LocalOrderTimeoutMessageListener(OrderTimeoutMessageProcessor processor) {
+        this.processor = processor;
     }
 
     @EventListener
     public void onMessage(OrderTimeoutMessage message) {
-        orderTimeoutCloseService.closeIfExpired(message.orderId(), message.expireTime(), "payment timeout message");
+        processor.consume(message, 0, false);
     }
 }

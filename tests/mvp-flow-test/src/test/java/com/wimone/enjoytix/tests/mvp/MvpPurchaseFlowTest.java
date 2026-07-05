@@ -6,8 +6,12 @@ import com.wimone.enjoytix.framework.distributedid.core.SnowflakeIdGenerator;
 import com.wimone.enjoytix.order.dto.req.OrderCreateReqDTO;
 import com.wimone.enjoytix.order.dto.resp.OrderCreateRespDTO;
 import com.wimone.enjoytix.order.dto.resp.OrderDetailRespDTO;
+import com.wimone.enjoytix.order.common.enums.OrderTimeoutMessageStatusEnum;
+import com.wimone.enjoytix.order.config.OrderTimeoutMessageProperties;
 import com.wimone.enjoytix.order.remote.TicketRemoteService;
 import com.wimone.enjoytix.order.repository.InMemoryOrderRepository;
+import com.wimone.enjoytix.order.message.OrderTimeoutMessage;
+import com.wimone.enjoytix.order.message.OrderTimeoutMessageProcessor;
 import com.wimone.enjoytix.order.service.impl.OrderServiceImpl;
 import com.wimone.enjoytix.pay.dto.req.MockPayReqDTO;
 import com.wimone.enjoytix.pay.dto.req.PayCreateReqDTO;
@@ -90,22 +94,59 @@ class MvpPurchaseFlowTest {
                 .allMatch(each -> SeatStockStatusEnum.AVAILABLE.name().equals(each.status())));
     }
 
+    @Test
+    void shouldConsumeTimeoutMessageIdempotently() {
+        TestFixture fixture = newFixture(0);
+
+        Long userId = 1L;
+        OrderCreateReqDTO createOrder = new OrderCreateReqDTO();
+        createOrder.setShowId(2001L);
+        createOrder.setCategoryId(3001L);
+        createOrder.setSeatIds(List.of(400104L));
+
+        OrderCreateRespDTO order = fixture.orderService().create(userId, createOrder);
+        OrderTimeoutMessage message = new OrderTimeoutMessage(order.orderId(), order.lockId(), order.payExpireTime());
+
+        fixture.timeoutMessageProcessor().recordSent(message);
+        fixture.timeoutMessageProcessor().consume(message, 0, true);
+        fixture.timeoutMessageProcessor().consume(message, 0, true);
+
+        OrderDetailRespDTO closedOrder = fixture.orderService().detail(userId, order.orderId());
+        assertEquals("CLOSED", closedOrder.status());
+        assertEquals(
+                OrderTimeoutMessageStatusEnum.SUCCESS.name(),
+                fixture.orderRepository()
+                        .findTimeoutMessageLog(message.messageKey())
+                        .orElseThrow()
+                        .getStatus()
+        );
+    }
+
     private TestFixture newFixture(long lockTtlMinutes) {
         IdGeneratorManager idGeneratorManager = new IdGeneratorManager(new SnowflakeIdGenerator(17));
         InMemoryTicketRepository ticketRepository = new InMemoryTicketRepository();
         ticketRepository.initSeedData();
         TicketServiceImpl ticketService = new TicketServiceImpl(ticketRepository, idGeneratorManager, lockTtlMinutes);
         TicketRemoteService ticketRemote = new LocalTicketRemoteService(ticketService);
-        OrderServiceImpl orderService = new OrderServiceImpl(new InMemoryOrderRepository(), ticketRemote, idGeneratorManager);
+        InMemoryOrderRepository orderRepository = new InMemoryOrderRepository();
+        OrderServiceImpl orderService = new OrderServiceImpl(orderRepository, ticketRemote, idGeneratorManager);
+        OrderTimeoutMessageProcessor timeoutMessageProcessor = new OrderTimeoutMessageProcessor(
+                orderRepository,
+                orderService,
+                idGeneratorManager,
+                new OrderTimeoutMessageProperties()
+        );
         OrderRemoteService orderRemote = new LocalOrderRemoteService(orderService);
         PayServiceImpl payService = new PayServiceImpl(new InMemoryPayRepository(), orderRemote, idGeneratorManager);
-        return new TestFixture(ticketService, orderService, payService);
+        return new TestFixture(ticketService, orderService, payService, orderRepository, timeoutMessageProcessor);
     }
 
     private record TestFixture(
             TicketServiceImpl ticketService,
             OrderServiceImpl orderService,
-            PayServiceImpl payService
+            PayServiceImpl payService,
+            InMemoryOrderRepository orderRepository,
+            OrderTimeoutMessageProcessor timeoutMessageProcessor
     ) {
     }
 

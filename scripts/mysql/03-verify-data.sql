@@ -33,6 +33,8 @@ SELECT 'enjoytix_order.et_order', COUNT(*) FROM enjoytix_order.et_order
 UNION ALL
 SELECT 'enjoytix_order.et_order_item', COUNT(*) FROM enjoytix_order.et_order_item
 UNION ALL
+SELECT 'enjoytix_order.et_order_timeout_message_log', COUNT(*) FROM enjoytix_order.et_order_timeout_message_log
+UNION ALL
 SELECT 'enjoytix_pay.et_pay_order', COUNT(*) FROM enjoytix_pay.et_pay_order
 UNION ALL
 SELECT 'enjoytix_marketing.et_coupon', COUNT(*) FROM enjoytix_marketing.et_coupon;

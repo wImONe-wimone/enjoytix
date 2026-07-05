@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
 import com.wimone.enjoytix.framework.database.base.BaseDO;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @TableName(value = "et_seat_lock", autoResultMap = true)
@@ -53,11 +54,12 @@ public class TicketLockDO extends BaseDO {
     }
 
     public List<Long> getSeatIds() {
+        seatIds = normalizeLongList(seatIds);
         return seatIds;
     }
 
     public void setSeatIds(List<Long> seatIds) {
-        this.seatIds = seatIds;
+        this.seatIds = normalizeLongList(seatIds);
     }
 
     public String getStatus() {
@@ -74,5 +76,20 @@ public class TicketLockDO extends BaseDO {
 
     public void setExpireTime(LocalDateTime expireTime) {
         this.expireTime = expireTime;
+    }
+
+    private List<Long> normalizeLongList(List<?> values) {
+        if (values == null) {
+            return new ArrayList<>();
+        }
+        List<Long> result = new ArrayList<>(values.size());
+        for (Object value : values) {
+            if (value instanceof Number number) {
+                result.add(number.longValue());
+            } else if (value != null) {
+                result.add(Long.valueOf(value.toString()));
+            }
+        }
+        return result;
     }
 }

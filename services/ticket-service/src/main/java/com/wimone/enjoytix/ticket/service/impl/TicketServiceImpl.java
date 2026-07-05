@@ -80,7 +80,7 @@ public class TicketServiceImpl implements TicketService {
         return lockTemplate.execute(TicketLockKeys.showStock(requestParam.getShowId()), LOCK_WAIT_SECONDS, LOCK_LEASE_SECONDS, TimeUnit.SECONDS, () -> {
             expireLocks(requestParam.getShowId());
             TicketStockDO stock = findStock(requestParam.getShowId(), requestParam.getCategoryId());
-            List<Long> seatIds = new ArrayList<>(requestParam.getSeatIds());
+            List<Long> seatIds = normalizeSeatIds(requestParam.getSeatIds());
             int quantity = seatIds.isEmpty() ? normalizeQuantity(requestParam.getQuantity()) : seatIds.size();
             if (stock.availableStock() < quantity) {
                 throw new ClientException("Insufficient ticket stock");
@@ -166,7 +166,8 @@ public class TicketServiceImpl implements TicketService {
 
     private List<String> issueTickets(Long orderId, TicketLockDO lockDO) {
         List<String> ticketCodes = new ArrayList<>();
-        List<Long> seatIds = lockDO.getSeatIds().isEmpty() ? anonymousSeatIds(lockDO.getQuantity()) : lockDO.getSeatIds();
+        List<Long> lockedSeatIds = normalizeSeatIds(lockDO.getSeatIds());
+        List<Long> seatIds = lockedSeatIds.isEmpty() ? anonymousSeatIds(lockDO.getQuantity()) : lockedSeatIds;
         for (Long seatId : seatIds) {
             if (seatId > 0) {
                 SeatStockDO seat = repository.findSeat(lockDO.getShowId(), seatId).orElseThrow();
@@ -213,16 +214,18 @@ public class TicketServiceImpl implements TicketService {
         if (!TicketLockStatusEnum.LOCKED.name().equals(lockDO.getStatus())) {
             return;
         }
+        List<Long> seatIds = normalizeSeatIds(lockDO.getSeatIds());
         TicketStockDO stock = findStock(lockDO.getShowId(), lockDO.getCategoryId());
-        stock.setLockedStock(stock.getLockedStock() - lockDO.getQuantity());
+        stock.setLockedStock(Math.max(0, stock.getLockedStock() - lockDO.getQuantity()));
         repository.saveStock(stock);
-        for (Long seatId : lockDO.getSeatIds()) {
+        for (Long seatId : seatIds) {
             repository.findSeat(lockDO.getShowId(), seatId).ifPresent(seat -> {
                 seat.setStatus(SeatStockStatusEnum.AVAILABLE.name());
                 seat.setLockId(null);
                 repository.saveSeat(seat);
             });
         }
+        lockDO.setSeatIds(seatIds);
         lockDO.setStatus(targetStatus.name());
         lockDO.setUpdateTime(LocalDateTime.now());
         repository.saveLock(lockDO);
@@ -280,13 +283,29 @@ public class TicketServiceImpl implements TicketService {
     }
 
     private TicketLockRespDTO convertLock(TicketLockDO lockDO) {
+        List<Long> seatIds = normalizeSeatIds(lockDO.getSeatIds());
         return new TicketLockRespDTO(
                 lockDO.getId(),
                 lockDO.getShowId(),
                 lockDO.getCategoryId(),
                 lockDO.getQuantity(),
-                lockDO.getSeatIds(),
+                seatIds,
                 lockDO.getExpireTime()
         );
+    }
+
+    private List<Long> normalizeSeatIds(List<Long> seatIds) {
+        if (seatIds == null) {
+            return new ArrayList<>();
+        }
+        List<Long> result = new ArrayList<>(seatIds.size());
+        for (Object seatId : seatIds) {
+            if (seatId instanceof Number number) {
+                result.add(number.longValue());
+            } else if (seatId != null) {
+                result.add(Long.valueOf(seatId.toString()));
+            }
+        }
+        return result;
     }
 }

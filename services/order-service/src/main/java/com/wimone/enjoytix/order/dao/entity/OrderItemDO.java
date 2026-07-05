@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
 import com.wimone.enjoytix.framework.database.base.BaseDO;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
 
 @TableName(value = "et_order_item", autoResultMap = true)
@@ -55,11 +56,12 @@ public class OrderItemDO extends BaseDO {
     }
 
     public List<Long> getSeatIds() {
+        seatIds = normalizeLongList(seatIds);
         return seatIds;
     }
 
     public void setSeatIds(List<Long> seatIds) {
-        this.seatIds = seatIds;
+        this.seatIds = normalizeLongList(seatIds);
     }
 
     public BigDecimal getUnitPrice() {
@@ -84,5 +86,20 @@ public class OrderItemDO extends BaseDO {
 
     public void setTicketCodes(List<String> ticketCodes) {
         this.ticketCodes = ticketCodes;
+    }
+
+    private List<Long> normalizeLongList(List<?> values) {
+        if (values == null) {
+            return new ArrayList<>();
+        }
+        List<Long> result = new ArrayList<>(values.size());
+        for (Object value : values) {
+            if (value instanceof Number number) {
+                result.add(number.longValue());
+            } else if (value != null) {
+                result.add(Long.valueOf(value.toString()));
+            }
+        }
+        return result;
     }
 }

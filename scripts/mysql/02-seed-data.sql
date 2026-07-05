@@ -301,6 +301,20 @@ ON DUPLICATE KEY UPDATE
     `reason` = VALUES(`reason`),
     `del_flag` = VALUES(`del_flag`);
 
+INSERT INTO `et_order_timeout_message_log` (`id`, `message_key`, `order_id`, `lock_id`, `expire_time`, `status`, `retry_count`, `last_error`, `consume_time`, `del_flag`)
+VALUES
+    (6301, 'order-timeout:6001:2026-07-20T12:15', 6001, 5001, '2026-07-20 12:15:00.000', 'SUCCESS', 0, NULL, '2026-07-20 12:15:01.000', 0)
+ON DUPLICATE KEY UPDATE
+    `message_key` = VALUES(`message_key`),
+    `order_id` = VALUES(`order_id`),
+    `lock_id` = VALUES(`lock_id`),
+    `expire_time` = VALUES(`expire_time`),
+    `status` = VALUES(`status`),
+    `retry_count` = VALUES(`retry_count`),
+    `last_error` = VALUES(`last_error`),
+    `consume_time` = VALUES(`consume_time`),
+    `del_flag` = VALUES(`del_flag`);
+
 USE `enjoytix_pay`;
 
 INSERT INTO `et_pay_order` (`id`, `pay_sn`, `order_id`, `user_id`, `amount`, `status`, `paid_time`, `del_flag`)

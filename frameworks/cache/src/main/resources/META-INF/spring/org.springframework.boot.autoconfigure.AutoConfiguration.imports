@@ -1,1 +1,2 @@
+com.wimone.enjoytix.framework.cache.config.RedissonDnsResolverAutoConfiguration
 com.wimone.enjoytix.framework.cache.config.CacheAutoConfiguration

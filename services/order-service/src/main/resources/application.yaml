@@ -13,6 +13,19 @@ spring:
         import-check:
           enabled: false
 
+rocketmq:
+  producer:
+    group: ${spring.application.name}-producer
+
+order:
+  timeout-message:
+    topic: enjoytix_order_timeout
+    consumer-group: enjoytix_order_timeout_close_cg
+    send-timeout-millis: 3000
+    max-reconsume-times: 5
+    compensation-batch-size: 100
+    compensation-fixed-delay-millis: 60000
+
 management:
   endpoints:
     web:

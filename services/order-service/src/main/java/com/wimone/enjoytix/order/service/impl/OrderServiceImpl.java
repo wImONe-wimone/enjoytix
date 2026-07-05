@@ -82,7 +82,7 @@ public class OrderServiceImpl implements OrderService, OrderTimeoutCloseService 
         orderDO.setLockId(ticketLock.lockId());
         orderDO.setTotalAmount(totalAmount);
         orderDO.setStatus(OrderStatusEnum.PENDING_PAYMENT.name());
-        orderDO.setPayExpireTime(ticketLock.expireTime());
+        orderDO.setPayExpireTime(OrderTimeoutMessage.normalizeExpireTime(ticketLock.expireTime()));
         orderDO.setCreateTime(LocalDateTime.now());
         orderDO.setUpdateTime(LocalDateTime.now());
         orderDO.setDelFlag(0);
@@ -157,7 +157,7 @@ public class OrderServiceImpl implements OrderService, OrderTimeoutCloseService 
     }
 
     @Override
-    @Scheduled(fixedDelay = 30000L)
+    @Scheduled(fixedDelayString = "${order.expired-order-scan-fixed-delay-millis:30000}")
     public synchronized void closeExpiredOrders() {
         LocalDateTime now = LocalDateTime.now();
         orderRepository.listOrders()
@@ -170,14 +170,22 @@ public class OrderServiceImpl implements OrderService, OrderTimeoutCloseService 
     @Override
     public synchronized boolean closeIfExpired(Long orderId, LocalDateTime expectedExpireTime, String reason) {
         return orderRepository.findOrder(orderId)
-                .filter(each -> OrderStatusEnum.PENDING_PAYMENT.name().equals(each.getStatus()))
-                .filter(each -> expectedExpireTime == null || expectedExpireTime.equals(each.getPayExpireTime()))
-                .filter(each -> !each.getPayExpireTime().isAfter(LocalDateTime.now()))
-                .map(each -> {
-                    closeOrder(each, reason);
-                    return Boolean.TRUE;
-                })
-                .orElse(Boolean.FALSE);
+                .map(each -> closeIfExpired(each, expectedExpireTime, reason))
+                .orElse(Boolean.TRUE);
+    }
+
+    private boolean closeIfExpired(OrderDO orderDO, LocalDateTime expectedExpireTime, String reason) {
+        if (!OrderStatusEnum.PENDING_PAYMENT.name().equals(orderDO.getStatus())) {
+            return true;
+        }
+        if (!sameExpireTime(expectedExpireTime, orderDO.getPayExpireTime())) {
+            return false;
+        }
+        if (orderDO.getPayExpireTime().isAfter(LocalDateTime.now())) {
+            return false;
+        }
+        closeOrder(orderDO, reason);
+        return true;
     }
 
     private void closeOrder(OrderDO orderDO, String reason) {
@@ -259,6 +267,14 @@ public class OrderServiceImpl implements OrderService, OrderTimeoutCloseService 
         logDO.setUpdateTime(LocalDateTime.now());
         logDO.setDelFlag(0);
         orderRepository.saveStatusLog(logDO);
+    }
+
+    private boolean sameExpireTime(LocalDateTime expectedExpireTime, LocalDateTime actualExpireTime) {
+        if (expectedExpireTime == null || actualExpireTime == null) {
+            return true;
+        }
+        return OrderTimeoutMessage.normalizeExpireTime(expectedExpireTime)
+                .equals(OrderTimeoutMessage.normalizeExpireTime(actualExpireTime));
     }
 
     private OrderDetailRespDTO convert(OrderDO orderDO) {
