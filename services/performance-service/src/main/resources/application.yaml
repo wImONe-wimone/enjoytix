@@ -4,11 +4,17 @@ server:
 spring:
   application:
     name: enjoytix-performance-service
+  mvc:
+    problemdetails:
+      enabled: true
   cloud:
     nacos:
       discovery:
-        server-addr: 127.0.0.1:8848
+        enabled: ${ENJOYTIX_NACOS_ENABLED:true}
+        server-addr: ${ENJOYTIX_NACOS_SERVER_ADDR:127.0.0.1:8848}
+        fail-fast: false
       config:
+        enabled: ${ENJOYTIX_NACOS_ENABLED:true}
         server-addr: ${spring.cloud.nacos.discovery.server-addr}
         import-check:
           enabled: false

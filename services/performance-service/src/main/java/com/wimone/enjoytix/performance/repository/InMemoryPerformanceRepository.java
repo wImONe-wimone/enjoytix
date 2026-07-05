@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -106,8 +107,34 @@ public class InMemoryPerformanceRepository implements PerformanceRepository {
     }
 
     @Override
+    public List<ArtistDO> listArtistsByIds(List<Long> artistIds) {
+        if (artistIds == null || artistIds.isEmpty()) {
+            return List.of();
+        }
+        return artistIds.stream()
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .map(artists::get)
+                .filter(java.util.Objects::nonNull)
+                .toList();
+    }
+
+    @Override
     public Optional<VenueDO> findVenue(Long venueId) {
         return Optional.ofNullable(venues.get(venueId));
+    }
+
+    @Override
+    public List<VenueDO> listVenuesByIds(List<Long> venueIds) {
+        if (venueIds == null || venueIds.isEmpty()) {
+            return List.of();
+        }
+        return venueIds.stream()
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .map(venues::get)
+                .filter(java.util.Objects::nonNull)
+                .toList();
     }
 
     @Override
@@ -124,8 +151,21 @@ public class InMemoryPerformanceRepository implements PerformanceRepository {
     public List<ShowSessionDO> listShowsByPerformance(Long performanceId) {
         return sessions.values()
                 .stream()
-                .filter(each -> performanceId.equals(each.getPerformanceId()))
-                .sorted(Comparator.comparing(ShowSessionDO::getShowTime))
+                .filter(each -> Objects.equals(performanceId, each.getPerformanceId()))
+                .sorted(Comparator.comparing(ShowSessionDO::getShowTime, Comparator.nullsLast(LocalDateTime::compareTo)))
+                .toList();
+    }
+
+    @Override
+    public List<ShowSessionDO> listShowsByPerformanceIds(List<Long> performanceIds) {
+        if (performanceIds == null || performanceIds.isEmpty()) {
+            return List.of();
+        }
+        return sessions.values()
+                .stream()
+                .filter(each -> performanceIds.contains(each.getPerformanceId()))
+                .sorted(Comparator.comparing(ShowSessionDO::getPerformanceId, Comparator.nullsLast(Long::compareTo))
+                        .thenComparing(ShowSessionDO::getShowTime, Comparator.nullsLast(LocalDateTime::compareTo)))
                 .toList();
     }
 
@@ -133,8 +173,8 @@ public class InMemoryPerformanceRepository implements PerformanceRepository {
     public List<TicketCategoryDO> listCategoriesByShow(Long showId) {
         return categories.values()
                 .stream()
-                .filter(each -> showId.equals(each.getShowId()))
-                .sorted(Comparator.comparing(TicketCategoryDO::getPrice).reversed())
+                .filter(each -> Objects.equals(showId, each.getShowId()))
+                .sorted(Comparator.comparing(TicketCategoryDO::getPrice, Comparator.nullsLast(Comparator.reverseOrder())))
                 .toList();
     }
 
@@ -147,8 +187,9 @@ public class InMemoryPerformanceRepository implements PerformanceRepository {
     public List<SeatDO> listSeatsBySeatMap(Long seatMapId) {
         return seats.values()
                 .stream()
-                .filter(each -> seatMapId.equals(each.getSeatMapId()))
-                .sorted(Comparator.comparing(SeatDO::getRowNo).thenComparing(SeatDO::getColumnNo))
+                .filter(each -> Objects.equals(seatMapId, each.getSeatMapId()))
+                .sorted(Comparator.comparing(SeatDO::getRowNo, Comparator.nullsLast(Integer::compareTo))
+                        .thenComparing(SeatDO::getColumnNo, Comparator.nullsLast(Integer::compareTo)))
                 .toList();
     }
 

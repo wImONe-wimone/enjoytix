@@ -21,6 +21,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 @Repository
@@ -72,8 +73,28 @@ public class MyBatisPlusPerformanceRepository implements PerformanceRepository {
     }
 
     @Override
+    public List<ArtistDO> listArtistsByIds(List<Long> artistIds) {
+        List<Long> ids = normalizeIds(artistIds);
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        return artistMapper.selectList(Wrappers.lambdaQuery(ArtistDO.class)
+                .in(ArtistDO::getId, ids));
+    }
+
+    @Override
     public Optional<VenueDO> findVenue(Long venueId) {
         return Optional.ofNullable(venueMapper.selectById(venueId));
+    }
+
+    @Override
+    public List<VenueDO> listVenuesByIds(List<Long> venueIds) {
+        List<Long> ids = normalizeIds(venueIds);
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        return venueMapper.selectList(Wrappers.lambdaQuery(VenueDO.class)
+                .in(VenueDO::getId, ids));
     }
 
     @Override
@@ -90,6 +111,18 @@ public class MyBatisPlusPerformanceRepository implements PerformanceRepository {
     public List<ShowSessionDO> listShowsByPerformance(Long performanceId) {
         return showSessionMapper.selectList(Wrappers.lambdaQuery(ShowSessionDO.class)
                 .eq(ShowSessionDO::getPerformanceId, performanceId)
+                .orderByAsc(ShowSessionDO::getShowTime));
+    }
+
+    @Override
+    public List<ShowSessionDO> listShowsByPerformanceIds(List<Long> performanceIds) {
+        List<Long> ids = normalizeIds(performanceIds);
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        return showSessionMapper.selectList(Wrappers.lambdaQuery(ShowSessionDO.class)
+                .in(ShowSessionDO::getPerformanceId, ids)
+                .orderByAsc(ShowSessionDO::getPerformanceId)
                 .orderByAsc(ShowSessionDO::getShowTime));
     }
 
@@ -111,5 +144,12 @@ public class MyBatisPlusPerformanceRepository implements PerformanceRepository {
                 .eq(SeatDO::getSeatMapId, seatMapId)
                 .orderByAsc(SeatDO::getRowNo)
                 .orderByAsc(SeatDO::getColumnNo));
+    }
+
+    private List<Long> normalizeIds(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        return ids.stream().filter(Objects::nonNull).distinct().toList();
     }
 }

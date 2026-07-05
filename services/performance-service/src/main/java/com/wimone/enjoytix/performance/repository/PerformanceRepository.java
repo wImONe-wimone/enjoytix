@@ -20,13 +20,19 @@ public interface PerformanceRepository {
 
     Optional<ArtistDO> findArtist(Long artistId);
 
+    List<ArtistDO> listArtistsByIds(List<Long> artistIds);
+
     Optional<VenueDO> findVenue(Long venueId);
+
+    List<VenueDO> listVenuesByIds(List<Long> venueIds);
 
     Optional<HallDO> findHall(Long hallId);
 
     Optional<ShowSessionDO> findShow(Long showId);
 
     List<ShowSessionDO> listShowsByPerformance(Long performanceId);
+
+    List<ShowSessionDO> listShowsByPerformanceIds(List<Long> performanceIds);
 
     List<TicketCategoryDO> listCategoriesByShow(Long showId);
 
