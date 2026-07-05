@@ -11,6 +11,7 @@ import com.wimone.enjoytix.order.config.OrderTimeoutMessageProperties;
 import com.wimone.enjoytix.order.remote.TicketRemoteService;
 import com.wimone.enjoytix.order.repository.InMemoryOrderRepository;
 import com.wimone.enjoytix.order.message.OrderTimeoutMessage;
+import com.wimone.enjoytix.order.message.OrderTimeoutMessageLogService;
 import com.wimone.enjoytix.order.message.OrderTimeoutMessageProcessor;
 import com.wimone.enjoytix.order.service.impl.OrderServiceImpl;
 import com.wimone.enjoytix.pay.dto.req.MockPayReqDTO;
@@ -107,7 +108,7 @@ class MvpPurchaseFlowTest {
         OrderCreateRespDTO order = fixture.orderService().create(userId, createOrder);
         OrderTimeoutMessage message = new OrderTimeoutMessage(order.orderId(), order.lockId(), order.payExpireTime());
 
-        fixture.timeoutMessageProcessor().recordSent(message);
+        fixture.timeoutMessageLogService().recordSent(message);
         fixture.timeoutMessageProcessor().consume(message, 0, true);
         fixture.timeoutMessageProcessor().consume(message, 0, true);
 
@@ -130,15 +131,15 @@ class MvpPurchaseFlowTest {
         TicketRemoteService ticketRemote = new LocalTicketRemoteService(ticketService);
         InMemoryOrderRepository orderRepository = new InMemoryOrderRepository();
         OrderServiceImpl orderService = new OrderServiceImpl(orderRepository, ticketRemote, idGeneratorManager);
-        OrderTimeoutMessageProcessor timeoutMessageProcessor = new OrderTimeoutMessageProcessor(
+        OrderTimeoutMessageLogService timeoutMessageLogService = new OrderTimeoutMessageLogService(
                 orderRepository,
-                orderService,
                 idGeneratorManager,
                 new OrderTimeoutMessageProperties()
         );
+        OrderTimeoutMessageProcessor timeoutMessageProcessor = new OrderTimeoutMessageProcessor(timeoutMessageLogService, orderService);
         OrderRemoteService orderRemote = new LocalOrderRemoteService(orderService);
         PayServiceImpl payService = new PayServiceImpl(new InMemoryPayRepository(), orderRemote, idGeneratorManager);
-        return new TestFixture(ticketService, orderService, payService, orderRepository, timeoutMessageProcessor);
+        return new TestFixture(ticketService, orderService, payService, orderRepository, timeoutMessageLogService, timeoutMessageProcessor);
     }
 
     private record TestFixture(
@@ -146,6 +147,7 @@ class MvpPurchaseFlowTest {
             OrderServiceImpl orderService,
             PayServiceImpl payService,
             InMemoryOrderRepository orderRepository,
+            OrderTimeoutMessageLogService timeoutMessageLogService,
             OrderTimeoutMessageProcessor timeoutMessageProcessor
     ) {
     }

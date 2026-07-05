@@ -23,6 +23,7 @@ import com.wimone.enjoytix.ticket.service.TicketService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -30,6 +31,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @Service
+@Transactional
 public class TicketServiceImpl implements TicketService {
 
     private static final long LOCK_WAIT_SECONDS = 1L;
@@ -77,8 +79,11 @@ public class TicketServiceImpl implements TicketService {
 
     @Override
     public TicketLockRespDTO lock(Long userId, TicketLockReqDTO requestParam) {
+        // 加上锁
         return lockTemplate.execute(TicketLockKeys.showStock(requestParam.getShowId()), LOCK_WAIT_SECONDS, LOCK_LEASE_SECONDS, TimeUnit.SECONDS, () -> {
+            // 按场次id获取锁
             expireLocks(requestParam.getShowId());
+            // 查询票档库存
             TicketStockDO stock = findStock(requestParam.getShowId(), requestParam.getCategoryId());
             List<Long> seatIds = normalizeSeatIds(requestParam.getSeatIds());
             int quantity = seatIds.isEmpty() ? normalizeQuantity(requestParam.getQuantity()) : seatIds.size();
@@ -88,8 +93,10 @@ public class TicketServiceImpl implements TicketService {
             if (!seatIds.isEmpty()) {
                 validateAndLockSeats(requestParam.getShowId(), requestParam.getCategoryId(), seatIds);
             }
+            // 扣减库存，即增加锁定库存的数量
             stock.setLockedStock(stock.getLockedStock() + quantity);
             repository.saveStock(stock);
+            // 保存锁定的票
             TicketLockDO lockDO = new TicketLockDO();
             lockDO.setId(idGeneratorManager.nextId());
             lockDO.setUserId(userId);
@@ -115,6 +122,7 @@ public class TicketServiceImpl implements TicketService {
 
     @Override
     public Boolean release(Long userId, TicketReleaseReqDTO requestParam) {
+        // 根据 lockId 查询锁记录。
         TicketLockDO lockDO = findLock(requestParam.getLockId());
         return lockTemplate.execute(TicketLockKeys.showStock(lockDO.getShowId()), LOCK_WAIT_SECONDS, LOCK_LEASE_SECONDS, TimeUnit.SECONDS, () -> {
             assertOwner(userId, lockDO);
@@ -135,13 +143,16 @@ public class TicketServiceImpl implements TicketService {
                 releaseInternal(lockDO, TicketLockStatusEnum.EXPIRED);
                 throw new ClientException("Ticket lock expired");
             }
+            // lockedStock -= quantity，soldStock += quantity
             TicketStockDO stock = findStock(lockDO.getShowId(), lockDO.getCategoryId());
             stock.setLockedStock(stock.getLockedStock() - lockDO.getQuantity());
             stock.setSoldStock(stock.getSoldStock() + lockDO.getQuantity());
             repository.saveStock(stock);
+            // 锁票的状态改为出票
             lockDO.setStatus(TicketLockStatusEnum.ISSUED.name());
             lockDO.setUpdateTime(LocalDateTime.now());
             repository.saveLock(lockDO);
+            // 执行出票
             List<String> ticketCodes = issueTickets(requestParam.getOrderId(), lockDO);
             return new TicketIssueRespDTO(lockDO.getId(), requestParam.getOrderId(), ticketCodes);
         });
@@ -169,12 +180,14 @@ public class TicketServiceImpl implements TicketService {
         List<Long> lockedSeatIds = normalizeSeatIds(lockDO.getSeatIds());
         List<Long> seatIds = lockedSeatIds.isEmpty() ? anonymousSeatIds(lockDO.getQuantity()) : lockedSeatIds;
         for (Long seatId : seatIds) {
+            // 更改座位状态
             if (seatId > 0) {
                 SeatStockDO seat = repository.findSeat(lockDO.getShowId(), seatId).orElseThrow();
                 seat.setStatus(SeatStockStatusEnum.SOLD.name());
                 seat.setLockId(lockDO.getId());
                 repository.saveSeat(seat);
             }
+            // 电子票记录
             TicketIssueDO issueDO = new TicketIssueDO();
             issueDO.setId(idGeneratorManager.nextId());
             issueDO.setLockId(lockDO.getId());
@@ -188,6 +201,7 @@ public class TicketServiceImpl implements TicketService {
             issueDO.setUpdateTime(LocalDateTime.now());
             issueDO.setDelFlag(0);
             repository.saveIssue(issueDO);
+            // 生成电子码
             ticketCodes.add(issueDO.getTicketCode());
         }
         return ticketCodes;
@@ -211,16 +225,20 @@ public class TicketServiceImpl implements TicketService {
     }
 
     private void releaseInternal(TicketLockDO lockDO, TicketLockStatusEnum targetStatus) {
+        // 仅当锁状态为 LOCKED 时释放。
         if (!TicketLockStatusEnum.LOCKED.name().equals(lockDO.getStatus())) {
             return;
         }
         List<Long> seatIds = normalizeSeatIds(lockDO.getSeatIds());
         TicketStockDO stock = findStock(lockDO.getShowId(), lockDO.getCategoryId());
+        // 返还库存
         stock.setLockedStock(Math.max(0, stock.getLockedStock() - lockDO.getQuantity()));
         repository.saveStock(stock);
+        // 每个座位，状态恢复为 AVAILABLE
         for (Long seatId : seatIds) {
             repository.findSeat(lockDO.getShowId(), seatId).ifPresent(seat -> {
                 seat.setStatus(SeatStockStatusEnum.AVAILABLE.name());
+                // 清空lock id
                 seat.setLockId(null);
                 repository.saveSeat(seat);
             });

@@ -42,6 +42,9 @@ public class TicketController {
         this.ticketService = ticketService;
     }
 
+    /**
+     * 查询某场次的票档库存
+     */
     @Operation(summary = "List ticket availability", description = "Query ticket category stock for a show session.")
     @GetMapping("/availability")
     public Result<List<TicketAvailabilityRespDTO>> availability(
@@ -50,6 +53,9 @@ public class TicketController {
         return Results.success(ticketService.availability(showId));
     }
 
+    /**
+     * 查询某场次的座位状态
+     */
     @Operation(summary = "List seat availability", description = "Query seat-level availability for a show session.")
     @GetMapping("/seats")
     public Result<List<SeatAvailabilityRespDTO>> seats(
@@ -58,6 +64,7 @@ public class TicketController {
         return Results.success(ticketService.seats(showId));
     }
 
+    // 是锁定票的库存和座位
     @OperationLog("ticket-lock")
     @Operation(summary = "Lock tickets", description = "Lock ticket category inventory or specific seats for checkout.")
     @Idempotent(
@@ -74,6 +81,7 @@ public class TicketController {
         return Results.success(ticketService.lock(userId, requestParam));
     }
 
+    // 释放锁票
     @OperationLog("ticket-release")
     @Operation(summary = "Release ticket lock", description = "Release a pending ticket lock and return stock or seats.")
     @Idempotent(
@@ -90,6 +98,7 @@ public class TicketController {
         return Results.success(ticketService.release(userId, requestParam));
     }
 
+    // 出票
     @OperationLog("ticket-issue")
     @Operation(summary = "Issue tickets", description = "Confirm a locked ticket stock or seat lock and generate ticket codes.")
     @Idempotent(

@@ -4,6 +4,9 @@ server:
 spring:
   application:
     name: enjoytix-user-service
+  mvc:
+    problemdetails:
+      enabled: true
   cloud:
     nacos:
       discovery:

@@ -12,10 +12,12 @@ import com.wimone.enjoytix.user.repository.UserRepository;
 import com.wimone.enjoytix.user.service.UserService;
 import com.wimone.enjoytix.user.toolkit.PasswordUtil;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 
 @Service
+@Transactional
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
@@ -47,6 +49,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public UserLoginRespDTO login(UserLoginReqDTO requestParam) {
         UserDO userDO = userRepository.findUserByUsername(requestParam.getUsername())
                 .orElseThrow(() -> new ClientException("Username or password is invalid"));
@@ -60,6 +63,7 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public UserRespDTO queryByUserId(Long userId) {
         return userRepository.findUserById(userId)
                 .map(this::convert)

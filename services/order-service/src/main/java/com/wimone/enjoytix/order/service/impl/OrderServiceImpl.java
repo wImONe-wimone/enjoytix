@@ -29,12 +29,14 @@ import com.wimone.enjoytix.order.service.OrderTimeoutCloseService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
+@Transactional
 public class OrderServiceImpl implements OrderService, OrderTimeoutCloseService {
 
     private final OrderRepository orderRepository;
@@ -63,15 +65,19 @@ public class OrderServiceImpl implements OrderService, OrderTimeoutCloseService 
 
     @Override
     public synchronized OrderCreateRespDTO create(Long userId, OrderCreateReqDTO requestParam) {
+        // 清理已过期待支付订单
         closeExpiredOrders();
+        // 查询票档价格和库存
         TicketAvailabilityRespDTO availability = findAvailability(requestParam.getShowId(), requestParam.getCategoryId());
         int quantity = requestParam.getSeatIds().isEmpty() ? normalizeQuantity(requestParam.getQuantity()) : requestParam.getSeatIds().size();
+        // 锁定库存或座位
         TicketLockRespDTO ticketLock = callTicketLock(userId, new TicketLockReqDTO(
                 requestParam.getShowId(),
                 requestParam.getCategoryId(),
                 quantity,
                 requestParam.getSeatIds()
         ));
+        // 保存订单号
         BigDecimal totalAmount = availability.price().multiply(BigDecimal.valueOf(quantity));
         Long orderId = idGeneratorManager.nextId();
         OrderDO orderDO = new OrderDO();
@@ -88,6 +94,7 @@ public class OrderServiceImpl implements OrderService, OrderTimeoutCloseService 
         orderDO.setDelFlag(0);
         orderRepository.saveOrder(orderDO);
 
+        // 保存订单明细
         OrderItemDO itemDO = new OrderItemDO();
         itemDO.setId(idGeneratorManager.nextId());
         itemDO.setOrderId(orderId);
@@ -103,6 +110,7 @@ public class OrderServiceImpl implements OrderService, OrderTimeoutCloseService 
         itemDO.setDelFlag(0);
         orderRepository.saveItem(itemDO);
         recordStatus(orderId, null, OrderStatusEnum.PENDING_PAYMENT.name(), "create order");
+        // 发送订单超时关闭的延迟消息
         orderTimeoutMessageSender.send(new OrderTimeoutMessage(orderId, ticketLock.lockId(), orderDO.getPayExpireTime()));
         return new OrderCreateRespDTO(orderId, orderDO.getOrderSn(), ticketLock.lockId(), totalAmount, orderDO.getStatus(), orderDO.getPayExpireTime());
     }
@@ -114,7 +122,9 @@ public class OrderServiceImpl implements OrderService, OrderTimeoutCloseService 
         if (!OrderStatusEnum.PENDING_PAYMENT.name().equals(orderDO.getStatus())) {
             throw new ClientException("Only pending orders can be canceled");
         }
+        // 释放库存和座位
         releaseTicket(orderDO);
+        // 修改订单状态
         changeStatus(orderDO, OrderStatusEnum.CANCELED, "user cancel");
         return Boolean.TRUE;
     }
@@ -132,12 +142,14 @@ public class OrderServiceImpl implements OrderService, OrderTimeoutCloseService 
             closeOrder(orderDO, "payment after timeout");
             throw new ClientException("Order has expired");
         }
+        // 出票
         TicketIssueRespDTO issueResult = callTicketIssue(orderDO.getUserId(), new TicketIssueReqDTO(orderDO.getLockId(), orderDO.getId()));
         orderRepository.listItems(orderDO.getId()).forEach(each -> {
             each.setTicketCodes(issueResult.ticketCodes());
             each.setUpdateTime(LocalDateTime.now());
             orderRepository.saveItem(each);
         });
+        // 修改订单状态
         changeStatus(orderDO, OrderStatusEnum.PAID, "pay success");
         return convert(orderDO);
     }

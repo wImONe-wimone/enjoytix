@@ -18,10 +18,12 @@ import com.wimone.enjoytix.pay.remote.dto.OrderPaySuccessReqDTO;
 import com.wimone.enjoytix.pay.repository.PayRepository;
 import com.wimone.enjoytix.pay.service.PayService;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 
 @Service
+@Transactional
 public class PayServiceImpl implements PayService {
 
     private final PayRepository payRepository;
@@ -66,6 +68,7 @@ public class PayServiceImpl implements PayService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public PayRespDTO detail(Long userId, Long payId) {
         PayDO payDO = findPay(payId);
         assertOwner(userId, payDO);

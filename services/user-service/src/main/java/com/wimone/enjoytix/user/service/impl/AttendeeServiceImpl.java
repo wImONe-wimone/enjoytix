@@ -10,11 +10,13 @@ import com.wimone.enjoytix.user.dto.resp.AttendeeRespDTO;
 import com.wimone.enjoytix.user.repository.UserRepository;
 import com.wimone.enjoytix.user.service.AttendeeService;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
+@Transactional
 public class AttendeeServiceImpl implements AttendeeService {
 
     private final UserRepository userRepository;
@@ -67,6 +69,7 @@ public class AttendeeServiceImpl implements AttendeeService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<AttendeeRespDTO> list(Long userId) {
         ensureUserExists(userId);
         return userRepository.listAttendees(userId).stream().map(this::convert).toList();

@@ -6,11 +6,13 @@ import com.wimone.enjoytix.order.config.OrderTimeoutMessageProperties;
 import com.wimone.enjoytix.order.dao.entity.OrderTimeoutMessageLogDO;
 import com.wimone.enjoytix.order.repository.OrderRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
+@Transactional
 public class OrderTimeoutMessageLogService {
 
     private static final int MAX_ERROR_LENGTH = 512;

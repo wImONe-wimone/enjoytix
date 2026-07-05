@@ -23,10 +23,6 @@ public record OrderTimeoutMessage(
         if (expireTime == null) {
             return null;
         }
-        int roundedMillis = (expireTime.getNano() + 500_000) / 1_000_000;
-        if (roundedMillis >= 1000) {
-            return expireTime.plusSeconds(1).withNano(0);
-        }
-        return expireTime.withNano(roundedMillis * 1_000_000);
+        return expireTime.withNano((expireTime.getNano() / 1_000_000) * 1_000_000);
     }
 }

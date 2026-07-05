@@ -3,11 +3,13 @@ package com.wimone.enjoytix.order.message;
 import com.wimone.enjoytix.order.dao.entity.OrderTimeoutMessageLogDO;
 import com.wimone.enjoytix.order.service.OrderTimeoutCloseService;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
+@Transactional
 public class OrderTimeoutMessageProcessor {
 
     private final OrderTimeoutMessageLogService logService;
