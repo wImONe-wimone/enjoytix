@@ -28,6 +28,7 @@
         <module>dependencies</module>
         <module>frameworks</module>
         <module>services</module>
+        <module>tests</module>
     </modules>
 
     <dependencyManagement>
