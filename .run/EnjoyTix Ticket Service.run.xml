@@ -1,0 +1,10 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="EnjoyTix Ticket Service" type="Application" factoryName="Application">
+    <option name="MAIN_CLASS_NAME" value="com.wimone.enjoytix.ticket.TicketServiceApplication" />
+    <option name="VM_PARAMETERS" value="-Dspring.data.redis.password=Sm9sVXBOYJjI030b5tz0trjpzvZzRhtZmEbv0uOImcD1wEDOPfeaqNU4PxHob/Wp -Dspring.data.redis.port=19389 -Dunique-name=-enjoytix_wimone -Dframework.cache.redis.prefix=enjoytix_wimone: -Dspring.data.redis.host=common-redis-dev.magestack.cn -Drocketmq.name-server=common-rocketmq-dev.magestack.cn:9876 -Dspring.cloud.nacos.discovery.server-addr=common-nacos-dev.magestack.cn:8848" />
+    <module name="enjoytix-ticket-service" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>
