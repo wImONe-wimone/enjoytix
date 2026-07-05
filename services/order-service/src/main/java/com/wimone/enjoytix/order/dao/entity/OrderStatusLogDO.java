@@ -3,7 +3,7 @@ package com.wimone.enjoytix.order.dao.entity;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.wimone.enjoytix.framework.database.base.BaseDO;
 
-@TableName("t_order_status_log")
+@TableName("et_order_status_log")
 public class OrderStatusLogDO extends BaseDO {
 
     private Long orderId;

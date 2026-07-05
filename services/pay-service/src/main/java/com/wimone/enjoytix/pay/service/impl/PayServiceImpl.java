@@ -15,7 +15,7 @@ import com.wimone.enjoytix.pay.dto.resp.RefundRespDTO;
 import com.wimone.enjoytix.pay.remote.OrderRemoteService;
 import com.wimone.enjoytix.pay.remote.dto.OrderDetailRespDTO;
 import com.wimone.enjoytix.pay.remote.dto.OrderPaySuccessReqDTO;
-import com.wimone.enjoytix.pay.repository.InMemoryPayRepository;
+import com.wimone.enjoytix.pay.repository.PayRepository;
 import com.wimone.enjoytix.pay.service.PayService;
 import org.springframework.stereotype.Service;
 
@@ -24,12 +24,12 @@ import java.time.LocalDateTime;
 @Service
 public class PayServiceImpl implements PayService {
 
-    private final InMemoryPayRepository payRepository;
+    private final PayRepository payRepository;
     private final OrderRemoteService orderRemoteService;
     private final IdGeneratorManager idGeneratorManager;
 
     public PayServiceImpl(
-            InMemoryPayRepository payRepository,
+            PayRepository payRepository,
             OrderRemoteService orderRemoteService,
             IdGeneratorManager idGeneratorManager) {
         this.payRepository = payRepository;

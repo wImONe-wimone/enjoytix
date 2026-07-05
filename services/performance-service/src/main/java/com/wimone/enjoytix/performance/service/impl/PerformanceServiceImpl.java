@@ -19,7 +19,7 @@ import com.wimone.enjoytix.performance.dto.resp.SeatRespDTO;
 import com.wimone.enjoytix.performance.dto.resp.ShowSessionRespDTO;
 import com.wimone.enjoytix.performance.dto.resp.TicketCategoryRespDTO;
 import com.wimone.enjoytix.performance.dto.resp.VenueRespDTO;
-import com.wimone.enjoytix.performance.repository.InMemoryPerformanceRepository;
+import com.wimone.enjoytix.performance.repository.PerformanceRepository;
 import com.wimone.enjoytix.performance.service.PerformanceService;
 import org.springframework.stereotype.Service;
 
@@ -31,9 +31,9 @@ import java.util.List;
 @Service
 public class PerformanceServiceImpl implements PerformanceService {
 
-    private final InMemoryPerformanceRepository repository;
+    private final PerformanceRepository repository;
 
-    public PerformanceServiceImpl(InMemoryPerformanceRepository repository) {
+    public PerformanceServiceImpl(PerformanceRepository repository) {
         this.repository = repository;
     }
 

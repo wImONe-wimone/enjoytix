@@ -23,7 +23,7 @@ import com.wimone.enjoytix.order.remote.dto.TicketIssueRespDTO;
 import com.wimone.enjoytix.order.remote.dto.TicketLockReqDTO;
 import com.wimone.enjoytix.order.remote.dto.TicketLockRespDTO;
 import com.wimone.enjoytix.order.remote.dto.TicketReleaseReqDTO;
-import com.wimone.enjoytix.order.repository.InMemoryOrderRepository;
+import com.wimone.enjoytix.order.repository.OrderRepository;
 import com.wimone.enjoytix.order.service.OrderService;
 import com.wimone.enjoytix.order.service.OrderTimeoutCloseService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,14 +37,14 @@ import java.util.List;
 @Service
 public class OrderServiceImpl implements OrderService, OrderTimeoutCloseService {
 
-    private final InMemoryOrderRepository orderRepository;
+    private final OrderRepository orderRepository;
     private final TicketRemoteService ticketRemoteService;
     private final IdGeneratorManager idGeneratorManager;
     private final OrderTimeoutMessageSender orderTimeoutMessageSender;
 
     @Autowired
     public OrderServiceImpl(
-            InMemoryOrderRepository orderRepository,
+            OrderRepository orderRepository,
             TicketRemoteService ticketRemoteService,
             IdGeneratorManager idGeneratorManager,
             OrderTimeoutMessageSender orderTimeoutMessageSender) {
@@ -55,7 +55,7 @@ public class OrderServiceImpl implements OrderService, OrderTimeoutCloseService 
     }
 
     public OrderServiceImpl(
-            InMemoryOrderRepository orderRepository,
+            OrderRepository orderRepository,
             TicketRemoteService ticketRemoteService,
             IdGeneratorManager idGeneratorManager) {
         this(orderRepository, ticketRemoteService, idGeneratorManager, new NoopOrderTimeoutMessageSender());

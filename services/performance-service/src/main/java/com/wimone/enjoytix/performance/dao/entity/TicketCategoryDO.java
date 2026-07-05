@@ -5,7 +5,7 @@ import com.wimone.enjoytix.framework.database.base.BaseDO;
 
 import java.math.BigDecimal;
 
-@TableName("t_ticket_category")
+@TableName("et_ticket_category")
 public class TicketCategoryDO extends BaseDO {
 
     private Long showId;

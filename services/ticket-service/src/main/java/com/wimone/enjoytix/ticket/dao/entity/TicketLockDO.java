@@ -1,18 +1,21 @@
 package com.wimone.enjoytix.ticket.dao.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
 import com.wimone.enjoytix.framework.database.base.BaseDO;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
-@TableName("t_seat_lock")
+@TableName(value = "et_seat_lock", autoResultMap = true)
 public class TicketLockDO extends BaseDO {
 
     private Long userId;
     private Long showId;
     private Long categoryId;
     private Integer quantity;
+    @TableField(typeHandler = JacksonTypeHandler.class)
     private List<Long> seatIds;
     private String status;
     private LocalDateTime expireTime;

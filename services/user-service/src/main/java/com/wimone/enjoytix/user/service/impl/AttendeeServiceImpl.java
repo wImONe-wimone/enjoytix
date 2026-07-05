@@ -7,7 +7,7 @@ import com.wimone.enjoytix.user.dao.entity.AttendeeDO;
 import com.wimone.enjoytix.user.dto.req.AttendeeCreateReqDTO;
 import com.wimone.enjoytix.user.dto.req.AttendeeUpdateReqDTO;
 import com.wimone.enjoytix.user.dto.resp.AttendeeRespDTO;
-import com.wimone.enjoytix.user.repository.InMemoryUserRepository;
+import com.wimone.enjoytix.user.repository.UserRepository;
 import com.wimone.enjoytix.user.service.AttendeeService;
 import org.springframework.stereotype.Service;
 
@@ -17,10 +17,10 @@ import java.util.List;
 @Service
 public class AttendeeServiceImpl implements AttendeeService {
 
-    private final InMemoryUserRepository userRepository;
+    private final UserRepository userRepository;
     private final IdGeneratorManager idGeneratorManager;
 
-    public AttendeeServiceImpl(InMemoryUserRepository userRepository, IdGeneratorManager idGeneratorManager) {
+    public AttendeeServiceImpl(UserRepository userRepository, IdGeneratorManager idGeneratorManager) {
         this.userRepository = userRepository;
         this.idGeneratorManager = idGeneratorManager;
     }

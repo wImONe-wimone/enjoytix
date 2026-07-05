@@ -5,7 +5,7 @@ import com.wimone.enjoytix.framework.database.base.BaseDO;
 
 import java.math.BigDecimal;
 
-@TableName("t_refund_order")
+@TableName("et_refund_order")
 public class RefundDO extends BaseDO {
 
     private Long payId;

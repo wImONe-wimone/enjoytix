@@ -1,21 +1,25 @@
 package com.wimone.enjoytix.order.dao.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
 import com.wimone.enjoytix.framework.database.base.BaseDO;
 
 import java.math.BigDecimal;
 import java.util.List;
 
-@TableName("t_order_item")
+@TableName(value = "et_order_item", autoResultMap = true)
 public class OrderItemDO extends BaseDO {
 
     private Long orderId;
     private Long showId;
     private Long categoryId;
     private Integer quantity;
+    @TableField(typeHandler = JacksonTypeHandler.class)
     private List<Long> seatIds;
     private BigDecimal unitPrice;
     private BigDecimal amount;
+    @TableField(typeHandler = JacksonTypeHandler.class)
     private List<String> ticketCodes;
 
     public Long getOrderId() {

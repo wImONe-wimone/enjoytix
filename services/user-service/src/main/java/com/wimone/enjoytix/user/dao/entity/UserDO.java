@@ -3,7 +3,7 @@ package com.wimone.enjoytix.user.dao.entity;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.wimone.enjoytix.framework.database.base.BaseDO;
 
-@TableName("t_user")
+@TableName("et_user")
 public class UserDO extends BaseDO {
 
     private String username;

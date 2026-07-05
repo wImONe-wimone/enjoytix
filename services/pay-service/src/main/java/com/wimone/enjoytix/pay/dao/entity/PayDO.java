@@ -6,7 +6,7 @@ import com.wimone.enjoytix.framework.database.base.BaseDO;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-@TableName("t_pay_order")
+@TableName("et_pay_order")
 public class PayDO extends BaseDO {
 
     private String paySn;

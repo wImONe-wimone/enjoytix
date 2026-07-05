@@ -2,6 +2,7 @@ package com.wimone.enjoytix.user.repository;
 
 import com.wimone.enjoytix.user.dao.entity.AttendeeDO;
 import com.wimone.enjoytix.user.dao.entity.UserDO;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
@@ -12,38 +13,46 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Repository
-public class InMemoryUserRepository {
+@Profile("!mysql")
+public class InMemoryUserRepository implements UserRepository {
 
     private final Map<Long, UserDO> users = new ConcurrentHashMap<>();
     private final Map<String, Long> usernameIndex = new ConcurrentHashMap<>();
     private final Map<Long, AttendeeDO> attendees = new ConcurrentHashMap<>();
 
+    @Override
     public Optional<UserDO> findUserByUsername(String username) {
         Long userId = usernameIndex.get(username);
         return userId == null ? Optional.empty() : Optional.ofNullable(users.get(userId));
     }
 
+    @Override
     public Optional<UserDO> findUserById(Long userId) {
         return Optional.ofNullable(users.get(userId));
     }
 
+    @Override
     public boolean existsUsername(String username) {
         return usernameIndex.containsKey(username);
     }
 
+    @Override
     public void saveUser(UserDO userDO) {
         users.put(userDO.getId(), userDO);
         usernameIndex.put(userDO.getUsername(), userDO.getId());
     }
 
+    @Override
     public void saveAttendee(AttendeeDO attendeeDO) {
         attendees.put(attendeeDO.getId(), attendeeDO);
     }
 
+    @Override
     public Optional<AttendeeDO> findAttendee(Long attendeeId) {
         return Optional.ofNullable(attendees.get(attendeeId));
     }
 
+    @Override
     public List<AttendeeDO> listAttendees(Long userId) {
         List<AttendeeDO> result = new ArrayList<>();
         for (AttendeeDO attendeeDO : attendees.values()) {

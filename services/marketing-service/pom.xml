@@ -11,4 +11,12 @@
     </parent>
 
     <artifactId>enjoytix-marketing-service</artifactId>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.wimone.enjoytix</groupId>
+            <artifactId>enjoytix-database</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+    </dependencies>
 </project>

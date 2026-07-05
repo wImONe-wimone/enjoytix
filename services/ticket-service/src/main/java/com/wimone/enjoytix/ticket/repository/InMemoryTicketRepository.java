@@ -6,6 +6,7 @@ import com.wimone.enjoytix.ticket.dao.entity.TicketIssueDO;
 import com.wimone.enjoytix.ticket.dao.entity.TicketLockDO;
 import com.wimone.enjoytix.ticket.dao.entity.TicketStockDO;
 import jakarta.annotation.PostConstruct;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
@@ -17,7 +18,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
 @Repository
-public class InMemoryTicketRepository {
+@Profile("!mysql")
+public class InMemoryTicketRepository implements TicketRepository {
 
     private final Map<Long, TicketStockDO> stocks = new ConcurrentHashMap<>();
     private final Map<Long, SeatStockDO> seats = new ConcurrentHashMap<>();
@@ -36,10 +38,12 @@ public class InMemoryTicketRepository {
         seedDramaSeats();
     }
 
+    @Override
     public ReentrantLock lockForShow(Long showId) {
         return showLocks.computeIfAbsent(showId, key -> new ReentrantLock());
     }
 
+    @Override
     public List<TicketStockDO> listStocks(Long showId) {
         return stocks.values()
                 .stream()
@@ -48,10 +52,17 @@ public class InMemoryTicketRepository {
                 .toList();
     }
 
+    @Override
     public Optional<TicketStockDO> findStock(Long showId, Long categoryId) {
         return Optional.ofNullable(stocks.get(stockKey(showId, categoryId)));
     }
 
+    @Override
+    public void saveStock(TicketStockDO stockDO) {
+        stocks.put(stockDO.getId(), stockDO);
+    }
+
+    @Override
     public List<SeatStockDO> listSeats(Long showId) {
         return seats.values()
                 .stream()
@@ -60,23 +71,33 @@ public class InMemoryTicketRepository {
                 .toList();
     }
 
+    @Override
     public Optional<SeatStockDO> findSeat(Long showId, Long seatId) {
         SeatStockDO seat = seats.get(seatId);
         return seat == null || !showId.equals(seat.getShowId()) ? Optional.empty() : Optional.of(seat);
     }
 
+    @Override
+    public void saveSeat(SeatStockDO seatDO) {
+        seats.put(seatDO.getSeatId(), seatDO);
+    }
+
+    @Override
     public void saveLock(TicketLockDO lockDO) {
         locks.put(lockDO.getId(), lockDO);
     }
 
+    @Override
     public Optional<TicketLockDO> findLock(Long lockId) {
         return Optional.ofNullable(locks.get(lockId));
     }
 
+    @Override
     public List<TicketLockDO> listLocks(Long showId) {
         return locks.values().stream().filter(each -> showId.equals(each.getShowId())).toList();
     }
 
+    @Override
     public void saveIssue(TicketIssueDO issueDO) {
         issues.put(issueDO.getId(), issueDO);
     }

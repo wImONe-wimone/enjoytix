@@ -5,7 +5,7 @@ import com.wimone.enjoytix.framework.database.base.BaseDO;
 
 import java.time.LocalDateTime;
 
-@TableName("t_show_session")
+@TableName("et_show_session")
 public class ShowSessionDO extends BaseDO {
 
     private Long performanceId;

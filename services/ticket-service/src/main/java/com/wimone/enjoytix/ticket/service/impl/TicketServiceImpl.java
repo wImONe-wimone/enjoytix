@@ -18,7 +18,7 @@ import com.wimone.enjoytix.ticket.dto.resp.SeatAvailabilityRespDTO;
 import com.wimone.enjoytix.ticket.dto.resp.TicketAvailabilityRespDTO;
 import com.wimone.enjoytix.ticket.dto.resp.TicketIssueRespDTO;
 import com.wimone.enjoytix.ticket.dto.resp.TicketLockRespDTO;
-import com.wimone.enjoytix.ticket.repository.InMemoryTicketRepository;
+import com.wimone.enjoytix.ticket.repository.TicketRepository;
 import com.wimone.enjoytix.ticket.service.TicketService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -35,14 +35,14 @@ public class TicketServiceImpl implements TicketService {
     private static final long LOCK_WAIT_SECONDS = 1L;
     private static final long LOCK_LEASE_SECONDS = 30L;
 
-    private final InMemoryTicketRepository repository;
+    private final TicketRepository repository;
     private final IdGeneratorManager idGeneratorManager;
     private final long lockTtlMinutes;
     private final DistributedLockTemplate lockTemplate;
 
     @Autowired
     public TicketServiceImpl(
-            InMemoryTicketRepository repository,
+            TicketRepository repository,
             IdGeneratorManager idGeneratorManager,
             @Value("${ticket.lock.ttl-minutes:15}") long lockTtlMinutes,
             DistributedLockTemplate lockTemplate) {
@@ -53,7 +53,7 @@ public class TicketServiceImpl implements TicketService {
     }
 
     public TicketServiceImpl(
-            InMemoryTicketRepository repository,
+            TicketRepository repository,
             IdGeneratorManager idGeneratorManager,
             long lockTtlMinutes) {
         this(repository, idGeneratorManager, lockTtlMinutes, new LocalDistributedLockTemplate());
@@ -89,6 +89,7 @@ public class TicketServiceImpl implements TicketService {
                 validateAndLockSeats(requestParam.getShowId(), requestParam.getCategoryId(), seatIds);
             }
             stock.setLockedStock(stock.getLockedStock() + quantity);
+            repository.saveStock(stock);
             TicketLockDO lockDO = new TicketLockDO();
             lockDO.setId(idGeneratorManager.nextId());
             lockDO.setUserId(userId);
@@ -102,7 +103,10 @@ public class TicketServiceImpl implements TicketService {
             lockDO.setUpdateTime(LocalDateTime.now());
             lockDO.setDelFlag(0);
             if (!seatIds.isEmpty()) {
-                seatIds.forEach(seatId -> repository.findSeat(requestParam.getShowId(), seatId).ifPresent(seat -> seat.setLockId(lockDO.getId())));
+                seatIds.forEach(seatId -> repository.findSeat(requestParam.getShowId(), seatId).ifPresent(seat -> {
+                    seat.setLockId(lockDO.getId());
+                    repository.saveSeat(seat);
+                }));
             }
             repository.saveLock(lockDO);
             return convertLock(lockDO);
@@ -134,8 +138,10 @@ public class TicketServiceImpl implements TicketService {
             TicketStockDO stock = findStock(lockDO.getShowId(), lockDO.getCategoryId());
             stock.setLockedStock(stock.getLockedStock() - lockDO.getQuantity());
             stock.setSoldStock(stock.getSoldStock() + lockDO.getQuantity());
+            repository.saveStock(stock);
             lockDO.setStatus(TicketLockStatusEnum.ISSUED.name());
             lockDO.setUpdateTime(LocalDateTime.now());
+            repository.saveLock(lockDO);
             List<String> ticketCodes = issueTickets(requestParam.getOrderId(), lockDO);
             return new TicketIssueRespDTO(lockDO.getId(), requestParam.getOrderId(), ticketCodes);
         });
@@ -154,6 +160,7 @@ public class TicketServiceImpl implements TicketService {
         for (Long seatId : seatIds) {
             SeatStockDO seat = repository.findSeat(showId, seatId).orElseThrow();
             seat.setStatus(SeatStockStatusEnum.LOCKED.name());
+            repository.saveSeat(seat);
         }
     }
 
@@ -165,6 +172,7 @@ public class TicketServiceImpl implements TicketService {
                 SeatStockDO seat = repository.findSeat(lockDO.getShowId(), seatId).orElseThrow();
                 seat.setStatus(SeatStockStatusEnum.SOLD.name());
                 seat.setLockId(lockDO.getId());
+                repository.saveSeat(seat);
             }
             TicketIssueDO issueDO = new TicketIssueDO();
             issueDO.setId(idGeneratorManager.nextId());
@@ -207,14 +215,17 @@ public class TicketServiceImpl implements TicketService {
         }
         TicketStockDO stock = findStock(lockDO.getShowId(), lockDO.getCategoryId());
         stock.setLockedStock(stock.getLockedStock() - lockDO.getQuantity());
+        repository.saveStock(stock);
         for (Long seatId : lockDO.getSeatIds()) {
             repository.findSeat(lockDO.getShowId(), seatId).ifPresent(seat -> {
                 seat.setStatus(SeatStockStatusEnum.AVAILABLE.name());
                 seat.setLockId(null);
+                repository.saveSeat(seat);
             });
         }
         lockDO.setStatus(targetStatus.name());
         lockDO.setUpdateTime(LocalDateTime.now());
+        repository.saveLock(lockDO);
     }
 
     private int normalizeQuantity(Integer quantity) {

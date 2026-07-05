@@ -8,7 +8,7 @@ import com.wimone.enjoytix.user.dto.req.UserLoginReqDTO;
 import com.wimone.enjoytix.user.dto.req.UserRegisterReqDTO;
 import com.wimone.enjoytix.user.dto.resp.UserLoginRespDTO;
 import com.wimone.enjoytix.user.dto.resp.UserRespDTO;
-import com.wimone.enjoytix.user.repository.InMemoryUserRepository;
+import com.wimone.enjoytix.user.repository.UserRepository;
 import com.wimone.enjoytix.user.service.UserService;
 import com.wimone.enjoytix.user.toolkit.PasswordUtil;
 import org.springframework.stereotype.Service;
@@ -18,10 +18,10 @@ import java.time.LocalDateTime;
 @Service
 public class UserServiceImpl implements UserService {
 
-    private final InMemoryUserRepository userRepository;
+    private final UserRepository userRepository;
     private final IdGeneratorManager idGeneratorManager;
 
-    public UserServiceImpl(InMemoryUserRepository userRepository, IdGeneratorManager idGeneratorManager) {
+    public UserServiceImpl(UserRepository userRepository, IdGeneratorManager idGeneratorManager) {
         this.userRepository = userRepository;
         this.idGeneratorManager = idGeneratorManager;
     }

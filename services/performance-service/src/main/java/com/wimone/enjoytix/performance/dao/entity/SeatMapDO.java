@@ -3,7 +3,7 @@ package com.wimone.enjoytix.performance.dao.entity;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.wimone.enjoytix.framework.database.base.BaseDO;
 
-@TableName("t_seat_map")
+@TableName("et_seat_map")
 public class SeatMapDO extends BaseDO {
 
     private String name;

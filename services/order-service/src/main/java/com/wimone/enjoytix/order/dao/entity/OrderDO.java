@@ -6,7 +6,7 @@ import com.wimone.enjoytix.framework.database.base.BaseDO;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
-@TableName("t_order")
+@TableName("et_order")
 public class OrderDO extends BaseDO {
 
     private String orderSn;

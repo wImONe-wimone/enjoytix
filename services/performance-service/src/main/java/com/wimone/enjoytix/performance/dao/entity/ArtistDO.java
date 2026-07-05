@@ -3,7 +3,7 @@ package com.wimone.enjoytix.performance.dao.entity;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.wimone.enjoytix.framework.database.base.BaseDO;
 
-@TableName("t_artist")
+@TableName("et_artist")
 public class ArtistDO extends BaseDO {
 
     private String name;

@@ -3,7 +3,7 @@ package com.wimone.enjoytix.ticket.dao.entity;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.wimone.enjoytix.framework.database.base.BaseDO;
 
-@TableName("t_ticket_issue")
+@TableName("et_ticket_issue")
 public class TicketIssueDO extends BaseDO {
 
     private Long lockId;

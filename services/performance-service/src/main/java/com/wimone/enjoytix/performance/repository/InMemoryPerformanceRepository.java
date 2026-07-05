@@ -10,6 +10,7 @@ import com.wimone.enjoytix.performance.dao.entity.ShowSessionDO;
 import com.wimone.enjoytix.performance.dao.entity.TicketCategoryDO;
 import com.wimone.enjoytix.performance.dao.entity.VenueDO;
 import jakarta.annotation.PostConstruct;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
@@ -22,7 +23,8 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Repository
-public class InMemoryPerformanceRepository {
+@Profile("!mysql")
+public class InMemoryPerformanceRepository implements PerformanceRepository {
 
     private final Map<Long, ArtistDO> artists = new ConcurrentHashMap<>();
     private final Map<Long, VenueDO> venues = new ConcurrentHashMap<>();
@@ -88,30 +90,37 @@ public class InMemoryPerformanceRepository {
         seedSeats(theatreSeatMap.getId());
     }
 
+    @Override
     public List<PerformanceDO> listPerformances() {
         return performances.values().stream().sorted(Comparator.comparing(PerformanceDO::getId)).toList();
     }
 
+    @Override
     public Optional<PerformanceDO> findPerformance(Long performanceId) {
         return Optional.ofNullable(performances.get(performanceId));
     }
 
+    @Override
     public Optional<ArtistDO> findArtist(Long artistId) {
         return Optional.ofNullable(artists.get(artistId));
     }
 
+    @Override
     public Optional<VenueDO> findVenue(Long venueId) {
         return Optional.ofNullable(venues.get(venueId));
     }
 
+    @Override
     public Optional<HallDO> findHall(Long hallId) {
         return Optional.ofNullable(halls.get(hallId));
     }
 
+    @Override
     public Optional<ShowSessionDO> findShow(Long showId) {
         return Optional.ofNullable(sessions.get(showId));
     }
 
+    @Override
     public List<ShowSessionDO> listShowsByPerformance(Long performanceId) {
         return sessions.values()
                 .stream()
@@ -120,6 +129,7 @@ public class InMemoryPerformanceRepository {
                 .toList();
     }
 
+    @Override
     public List<TicketCategoryDO> listCategoriesByShow(Long showId) {
         return categories.values()
                 .stream()
@@ -128,10 +138,12 @@ public class InMemoryPerformanceRepository {
                 .toList();
     }
 
+    @Override
     public Optional<SeatMapDO> findSeatMap(Long seatMapId) {
         return Optional.ofNullable(seatMaps.get(seatMapId));
     }
 
+    @Override
     public List<SeatDO> listSeatsBySeatMap(Long seatMapId) {
         return seats.values()
                 .stream()
