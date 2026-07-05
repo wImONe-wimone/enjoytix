@@ -1,5 +1,6 @@
 package com.wimone.enjoytix.framework.web;
 
+import com.wimone.enjoytix.framework.base.trace.TraceContext;
 import com.wimone.enjoytix.framework.convention.errorcode.BaseErrorCode;
 import com.wimone.enjoytix.framework.convention.exception.AbstractException;
 import com.wimone.enjoytix.framework.convention.result.Result;
@@ -23,6 +24,7 @@ public class GlobalExceptionHandler {
         Result<Void> result = new Result<>();
         result.setCode(ex.code());
         result.setMessage(ex.getMessage());
+        result.setRequestId(TraceContext.getRequestId());
         return result;
     }
 

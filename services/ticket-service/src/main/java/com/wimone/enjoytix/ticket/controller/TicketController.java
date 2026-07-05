@@ -14,6 +14,9 @@ import com.wimone.enjoytix.ticket.dto.resp.TicketAvailabilityRespDTO;
 import com.wimone.enjoytix.ticket.dto.resp.TicketIssueRespDTO;
 import com.wimone.enjoytix.ticket.dto.resp.TicketLockRespDTO;
 import com.wimone.enjoytix.ticket.service.TicketService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.validation.annotation.Validated;
@@ -30,6 +33,7 @@ import java.util.List;
 @Validated
 @RestController
 @RequestMapping("/api/ticket")
+@Tag(name = "Ticket API", description = "Ticket inventory, seat availability, lock, release, and issue APIs.")
 public class TicketController {
 
     private final TicketService ticketService;
@@ -38,17 +42,24 @@ public class TicketController {
         this.ticketService = ticketService;
     }
 
+    @Operation(summary = "List ticket availability", description = "Query ticket category stock for a show session.")
     @GetMapping("/availability")
-    public Result<List<TicketAvailabilityRespDTO>> availability(@NotNull @RequestParam Long showId) {
+    public Result<List<TicketAvailabilityRespDTO>> availability(
+            @Parameter(description = "Show session id.", required = true)
+            @NotNull @RequestParam Long showId) {
         return Results.success(ticketService.availability(showId));
     }
 
+    @Operation(summary = "List seat availability", description = "Query seat-level availability for a show session.")
     @GetMapping("/seats")
-    public Result<List<SeatAvailabilityRespDTO>> seats(@NotNull @RequestParam Long showId) {
+    public Result<List<SeatAvailabilityRespDTO>> seats(
+            @Parameter(description = "Show session id.", required = true)
+            @NotNull @RequestParam Long showId) {
         return Results.success(ticketService.seats(showId));
     }
 
     @OperationLog("ticket-lock")
+    @Operation(summary = "Lock tickets", description = "Lock ticket category inventory or specific seats for checkout.")
     @Idempotent(
             key = "'ticket:lock:' + #p0 + ':' + #p1.showId + ':' + #p1.categoryId + ':' + #p1.quantity + ':' + #p1.seatIds",
             type = IdempotentTypeEnum.SPEL,
@@ -57,12 +68,14 @@ public class TicketController {
     )
     @PostMapping("/lock")
     public Result<TicketLockRespDTO> lock(
+            @Parameter(description = "Current user id.", required = true)
             @RequestHeader(TicketConstants.USER_ID_HEADER) Long userId,
             @Valid @RequestBody TicketLockReqDTO requestParam) {
         return Results.success(ticketService.lock(userId, requestParam));
     }
 
     @OperationLog("ticket-release")
+    @Operation(summary = "Release ticket lock", description = "Release a pending ticket lock and return stock or seats.")
     @Idempotent(
             key = "'ticket:release:' + #p0 + ':' + #p1.lockId",
             type = IdempotentTypeEnum.SPEL,
@@ -71,12 +84,14 @@ public class TicketController {
     )
     @PostMapping("/release")
     public Result<Boolean> release(
+            @Parameter(description = "Current user id.", required = true)
             @RequestHeader(TicketConstants.USER_ID_HEADER) Long userId,
             @Valid @RequestBody TicketReleaseReqDTO requestParam) {
         return Results.success(ticketService.release(userId, requestParam));
     }
 
     @OperationLog("ticket-issue")
+    @Operation(summary = "Issue tickets", description = "Confirm a locked ticket stock or seat lock and generate ticket codes.")
     @Idempotent(
             key = "'ticket:issue:' + #p0 + ':' + #p1.lockId + ':' + #p1.orderId",
             type = IdempotentTypeEnum.SPEL,
@@ -85,6 +100,7 @@ public class TicketController {
     )
     @PostMapping("/issue")
     public Result<TicketIssueRespDTO> issue(
+            @Parameter(description = "Current user id.", required = true)
             @RequestHeader(TicketConstants.USER_ID_HEADER) Long userId,
             @Valid @RequestBody TicketIssueReqDTO requestParam) {
         return Results.success(ticketService.issue(userId, requestParam));

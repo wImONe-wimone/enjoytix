@@ -4,6 +4,9 @@ server:
 spring:
   application:
     name: enjoytix-gateway-service
+  webflux:
+    problemdetails:
+      enabled: true
   cloud:
     nacos:
       discovery:
@@ -67,6 +70,51 @@ spring:
           uri: lb://enjoytix-marketing-service
           predicates:
             - Path=/api/marketing/**
+        - id: enjoytix-user-service-openapi
+          uri: lb://enjoytix-user-service
+          predicates:
+            - Path=/v3/api-docs/user-service
+          filters:
+            - RewritePath=/v3/api-docs/user-service, /v3/api-docs/enjoytix-api
+        - id: enjoytix-performance-service-openapi
+          uri: lb://enjoytix-performance-service
+          predicates:
+            - Path=/v3/api-docs/performance-service
+          filters:
+            - RewritePath=/v3/api-docs/performance-service, /v3/api-docs/enjoytix-api
+        - id: enjoytix-ticket-service-openapi
+          uri: lb://enjoytix-ticket-service
+          predicates:
+            - Path=/v3/api-docs/ticket-service
+          filters:
+            - RewritePath=/v3/api-docs/ticket-service, /v3/api-docs/enjoytix-api
+        - id: enjoytix-order-service-openapi
+          uri: lb://enjoytix-order-service
+          predicates:
+            - Path=/v3/api-docs/order-service
+          filters:
+            - RewritePath=/v3/api-docs/order-service, /v3/api-docs/enjoytix-api
+        - id: enjoytix-pay-service-openapi
+          uri: lb://enjoytix-pay-service
+          predicates:
+            - Path=/v3/api-docs/pay-service
+          filters:
+            - RewritePath=/v3/api-docs/pay-service, /v3/api-docs/enjoytix-api
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    urls:
+      - name: user-service
+        url: /v3/api-docs/user-service
+      - name: performance-service
+        url: /v3/api-docs/performance-service
+      - name: ticket-service
+        url: /v3/api-docs/ticket-service
+      - name: order-service
+        url: /v3/api-docs/order-service
+      - name: pay-service
+        url: /v3/api-docs/pay-service
 
 management:
   endpoints:

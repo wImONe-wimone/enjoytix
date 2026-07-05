@@ -1,8 +1,13 @@
 package com.wimone.enjoytix.user.dto.resp;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
+@Schema(description = "User login response.")
 public class UserLoginRespDTO {
 
+    @Schema(description = "Access token for gateway authorization.", example = "dev-1")
     private String accessToken;
+    @Schema(description = "Logged-in user profile.")
     private UserRespDTO user;
 
     public String getAccessToken() {

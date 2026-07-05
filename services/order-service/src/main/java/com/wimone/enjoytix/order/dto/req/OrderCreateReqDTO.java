@@ -1,20 +1,26 @@
 package com.wimone.enjoytix.order.dto.req;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
 
+@Schema(description = "Order creation request.")
 public class OrderCreateReqDTO {
 
     @NotNull
+    @Schema(description = "Show session id.", example = "2001")
     private Long showId;
 
     @NotNull
+    @Schema(description = "Ticket category id.", example = "3001")
     private Long categoryId;
 
+    @Schema(description = "Ticket quantity when no explicit seats are selected.", example = "1")
     private Integer quantity = 1;
 
+    @Schema(description = "Selected seat ids. Leave empty for non-seat-selectable ticket categories.", example = "[400101]")
     private List<Long> seatIds = new ArrayList<>();
 
     public Long getShowId() {

@@ -1,1 +1,2 @@
 com.wimone.enjoytix.framework.web.config.WebAutoConfiguration
+com.wimone.enjoytix.framework.web.config.OpenApiAutoConfiguration
