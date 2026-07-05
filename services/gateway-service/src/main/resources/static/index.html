@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EnjoyTix</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#/" aria-label="EnjoyTix 首页">
+        <span class="brand-mark">ET</span>
+        <span>EnjoyTix</span>
+      </a>
+      <nav class="nav" aria-label="主导航">
+        <a href="#/" data-nav="home">场次</a>
+        <a href="#/orders" data-nav="orders">订单</a>
+      </nav>
+      <section id="auth-root" class="auth" aria-label="账户"></section>
+    </header>
+    <main id="app" class="page" tabindex="-1"></main>
+  </div>
+  <div id="dialog-root"></div>
+  <div id="toast-root" aria-live="polite" aria-atomic="true"></div>
+  <script src="/config.js"></script>
+  <script src="/app.js" defer></script>
+</body>
+</html>
