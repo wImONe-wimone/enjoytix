@@ -39,7 +39,21 @@ public class InMemoryPerformanceRepository implements PerformanceRepository {
     @PostConstruct
     public void initSeedData() {
         ArtistDO artist = artist(100L, "Aurora Band", "Electronic pop live show");
-        VenueDO venue = venue(200L, "Enjoy Arena", "Shanghai", "No. 1888 Expo Avenue");
+        VenueDO venue = venue(
+                200L,
+                "Enjoy Arena",
+                "中国",
+                "北京市",
+                "北京市",
+                "朝阳区",
+                null,
+                null,
+                "阜通东大街",
+                "6号",
+                null,
+                null,
+                "北京市朝阳区阜通东大街6号"
+        );
         SeatMapDO seatMap = seatMap(400L, "Enjoy Arena Main Hall", 6, 8);
         HallDO hall = hall(300L, venue.getId(), "Main Hall", seatMap.getId());
         PerformanceDO performance = performance(
@@ -66,7 +80,21 @@ public class InMemoryPerformanceRepository implements PerformanceRepository {
         seedSeats(seatMap.getId());
 
         ArtistDO dramaArtist = artist(101L, "North Theatre", "Modern drama troupe");
-        VenueDO theatre = venue(201L, "River Theatre", "Beijing", "No. 66 Culture Road");
+        VenueDO theatre = venue(
+                201L,
+                "River Theatre",
+                "中国",
+                "北京市",
+                "北京市",
+                "东城区",
+                null,
+                null,
+                "东长安街",
+                "16号",
+                null,
+                null,
+                "北京市东城区东长安街16号"
+        );
         SeatMapDO theatreSeatMap = seatMap(401L, "River Theatre Hall A", 4, 6);
         HallDO theatreHall = hall(301L, theatre.getId(), "Hall A", theatreSeatMap.getId());
         PerformanceDO drama = performance(
@@ -203,11 +231,33 @@ public class InMemoryPerformanceRepository implements PerformanceRepository {
         return entity;
     }
 
-    private VenueDO venue(Long id, String name, String city, String address) {
+    private VenueDO venue(
+            Long id,
+            String name,
+            String country,
+            String province,
+            String city,
+            String district,
+            String town,
+            String village,
+            String street,
+            String houseNumber,
+            String estate,
+            String building,
+            String address) {
         VenueDO entity = new VenueDO();
         entity.setId(id);
         entity.setName(name);
+        entity.setCountry(country);
+        entity.setProvince(province);
         entity.setCity(city);
+        entity.setDistrict(district);
+        entity.setTown(town);
+        entity.setVillage(village);
+        entity.setStreet(street);
+        entity.setHouseNumber(houseNumber);
+        entity.setEstate(estate);
+        entity.setBuilding(building);
         entity.setAddress(address);
         entity.setDelFlag(0);
         venues.put(id, entity);

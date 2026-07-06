@@ -30,7 +30,7 @@ public class PerformanceController {
         this.performanceService = performanceService;
     }
 
-    @Operation(summary = "Page performances", description = "Search performances by city, type, artist, venue, and show date.")
+    @Operation(summary = "Page performances", description = "Search performances by type, artist, venue, and show date.")
     @GetMapping("/page")
     public Result<PageResponse<PerformanceListRespDTO>> page(@Valid @ModelAttribute PerformancePageQueryReqDTO requestParam) {
         return Results.success(performanceService.pageQuery(requestParam));

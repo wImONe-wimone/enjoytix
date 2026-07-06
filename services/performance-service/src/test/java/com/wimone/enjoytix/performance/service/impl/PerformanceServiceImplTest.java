@@ -52,9 +52,8 @@ class PerformanceServiceImplTest {
     }
 
     @Test
-    void pageQueryShouldFilterByCityTypeArtistVenueAndDate() {
+    void pageQueryShouldFilterByTypeArtistVenueAndDate() {
         PerformancePageQueryReqDTO query = new PerformancePageQueryReqDTO();
-        query.setCity("shanghai");
         query.setPerformanceType("concert");
         query.setArtistName("aurora");
         query.setVenueName("arena");
@@ -99,6 +98,12 @@ class PerformanceServiceImplTest {
         assertEquals("Aurora Band 2026 Live", detail.title());
         assertNotNull(detail.artist());
         assertNotNull(detail.venue());
+        assertEquals("中国", detail.venue().country());
+        assertEquals("北京市", detail.venue().city());
+        assertEquals("朝阳区", detail.venue().district());
+        assertEquals("阜通东大街", detail.venue().street());
+        assertEquals("6号", detail.venue().houseNumber());
+        assertEquals("北京市朝阳区阜通东大街6号", detail.venue().address());
         assertFalse(detail.sessions().isEmpty());
     }
 

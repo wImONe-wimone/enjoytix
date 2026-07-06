@@ -10,8 +10,6 @@ import java.time.LocalDate;
 @Schema(description = "Performance page query request.")
 public class PerformancePageQueryReqDTO {
 
-    @Schema(description = "Performance city.", example = "Shanghai")
-    private String city;
     @Schema(description = "Performance type.", example = "CONCERT")
     private String performanceType;
     @Schema(description = "Artist name keyword.", example = "Taylor")
@@ -31,14 +29,6 @@ public class PerformancePageQueryReqDTO {
     @Max(200)
     @Schema(description = "Page size, maximum 200.", example = "20")
     private long size = 20;
-
-    public String getCity() {
-        return city;
-    }
-
-    public void setCity(String city) {
-        this.city = city;
-    }
 
     public String getPerformanceType() {
         return performanceType;

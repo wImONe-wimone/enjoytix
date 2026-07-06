@@ -167,8 +167,7 @@ public class PerformanceServiceImpl implements PerformanceService {
             ArtistDO artist,
             VenueDO venue,
             List<ShowSessionDO> shows) {
-        return contains(performance.getCity(), requestParam.getCity())
-                && contains(performance.getPerformanceType(), requestParam.getPerformanceType())
+        return contains(performance.getPerformanceType(), requestParam.getPerformanceType())
                 && matchesArtist(artist, requestParam.getArtistName())
                 && matchesVenue(venue, requestParam.getVenueName())
                 && matchesShowDate(shows, requestParam.getShowDate());
@@ -290,7 +289,58 @@ public class PerformanceServiceImpl implements PerformanceService {
         if (venue == null) {
             return null;
         }
-        return new VenueRespDTO(venue.getId(), venue.getName(), venue.getCity(), venue.getAddress());
+        return new VenueRespDTO(
+                venue.getId(),
+                venue.getName(),
+                venue.getCountry(),
+                venue.getProvince(),
+                venue.getCity(),
+                venue.getDistrict(),
+                venue.getTown(),
+                venue.getVillage(),
+                venue.getStreet(),
+                venue.getHouseNumber(),
+                venue.getEstate(),
+                venue.getBuilding(),
+                formatVenueAddress(venue)
+        );
+    }
+
+    private String formatVenueAddress(VenueDO venue) {
+        String storedAddress = trimToNull(venue.getAddress());
+        if (storedAddress != null) {
+            return storedAddress;
+        }
+        StringBuilder builder = new StringBuilder();
+        appendAddressPart(builder, venue.getProvince());
+        appendAddressPart(builder, venue.getCity());
+        appendAddressPart(builder, venue.getDistrict());
+        appendAddressPart(builder, venue.getTown());
+        appendAddressPart(builder, venue.getVillage());
+        appendAddressPart(builder, venue.getStreet());
+        appendAddressPart(builder, venue.getHouseNumber());
+        appendAddressPart(builder, venue.getEstate());
+        appendAddressPart(builder, venue.getBuilding());
+        return trimToNull(builder.toString());
+    }
+
+    private void appendAddressPart(StringBuilder builder, String value) {
+        String part = trimToNull(value);
+        if (part == null) {
+            return;
+        }
+        int length = builder.length();
+        if (length > 0 && builder.substring(Math.max(0, length - part.length())).equals(part)) {
+            return;
+        }
+        builder.append(part);
+    }
+
+    private String trimToNull(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 
     private ShowSessionRespDTO convertShow(ShowSessionDO show) {
