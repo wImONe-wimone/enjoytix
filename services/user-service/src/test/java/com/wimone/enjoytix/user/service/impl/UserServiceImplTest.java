@@ -7,6 +7,7 @@ import com.wimone.enjoytix.framework.distributedid.core.IdGeneratorManager;
 import com.wimone.enjoytix.user.dto.req.AttendeeCreateReqDTO;
 import com.wimone.enjoytix.user.dto.req.UserAddressCreateReqDTO;
 import com.wimone.enjoytix.user.dto.req.UserOrderCancelReqDTO;
+import com.wimone.enjoytix.user.dto.req.UserOrderRefundReqDTO;
 import com.wimone.enjoytix.user.dto.req.UserProfileUpdateReqDTO;
 import com.wimone.enjoytix.user.dto.req.UserRegisterReqDTO;
 import com.wimone.enjoytix.user.dto.resp.AttendeeRespDTO;
@@ -14,7 +15,9 @@ import com.wimone.enjoytix.user.dto.resp.UserAddressRespDTO;
 import com.wimone.enjoytix.user.dto.resp.UserLoginRespDTO;
 import com.wimone.enjoytix.user.dto.resp.UserRespDTO;
 import com.wimone.enjoytix.user.remote.OrderRemoteService;
+import com.wimone.enjoytix.user.remote.PayRemoteService;
 import com.wimone.enjoytix.user.remote.dto.OrderDetailRespDTO;
+import com.wimone.enjoytix.user.remote.dto.RefundRespDTO;
 import com.wimone.enjoytix.user.repository.InMemoryUserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -105,7 +108,8 @@ class UserServiceImplTest {
     @Test
     void userOrderServiceDelegatesToOrderService() {
         OrderRemoteService remoteService = mock(OrderRemoteService.class);
-        UserOrderServiceImpl userOrderService = new UserOrderServiceImpl(remoteService);
+        PayRemoteService payRemoteService = mock(PayRemoteService.class);
+        UserOrderServiceImpl userOrderService = new UserOrderServiceImpl(remoteService, payRemoteService);
         OrderDetailRespDTO order = orderDetail(6001L);
         when(remoteService.list(1000L)).thenReturn(Result.success(List.of(order)));
         when(remoteService.detail(1000L, 6001L)).thenReturn(Result.success(order));
@@ -121,12 +125,37 @@ class UserServiceImplTest {
     @Test
     void userOrderServicePropagatesRemoteFailure() {
         OrderRemoteService remoteService = mock(OrderRemoteService.class);
+        PayRemoteService payRemoteService = mock(PayRemoteService.class);
         when(remoteService.list(1000L)).thenReturn(Result.failure(
                 com.wimone.enjoytix.framework.convention.errorcode.BaseErrorCode.REMOTE_ERROR,
                 "order service unavailable"));
-        UserOrderServiceImpl userOrderService = new UserOrderServiceImpl(remoteService);
+        UserOrderServiceImpl userOrderService = new UserOrderServiceImpl(remoteService, payRemoteService);
 
         assertThrows(RemoteException.class, () -> userOrderService.list(1000L));
+    }
+
+    @Test
+    void userOrderServiceRefundOrchestratesOrderPayAndTicketCompletion() {
+        OrderRemoteService orderRemoteService = mock(OrderRemoteService.class);
+        PayRemoteService payRemoteService = mock(PayRemoteService.class);
+        UserOrderServiceImpl userOrderService = new UserOrderServiceImpl(orderRemoteService, payRemoteService);
+        OrderDetailRespDTO refundingOrder = orderDetail(6001L, "REFUNDING");
+        OrderDetailRespDTO refundedOrder = orderDetail(6001L, "REFUNDED");
+        when(orderRemoteService.applyRefund(eq(1000L), any())).thenReturn(Result.success(refundingOrder));
+        when(payRemoteService.applyByOrder(eq(1000L), any())).thenReturn(Result.success(
+                new RefundRespDTO(8001L, 7001L, 6001L, new BigDecimal("1280.00"), "SUCCESS", "Cannot attend")));
+        when(orderRemoteService.completeRefund(eq(1000L), any())).thenReturn(Result.success(refundedOrder));
+
+        UserOrderRefundReqDTO refundReq = new UserOrderRefundReqDTO();
+        refundReq.setOrderId(6001L);
+        refundReq.setReason("Cannot attend");
+
+        var response = userOrderService.refund(1000L, refundReq);
+
+        assertEquals(6001L, response.orderId());
+        assertEquals(8001L, response.refundId());
+        assertEquals("SUCCESS", response.refundStatus());
+        assertEquals("REFUNDED", response.orderStatus());
     }
 
     private UserRegisterReqDTO registerRequest(String username) {
@@ -169,6 +198,10 @@ class UserServiceImplTest {
     }
 
     private OrderDetailRespDTO orderDetail(Long orderId) {
+        return orderDetail(orderId, "PENDING_PAYMENT");
+    }
+
+    private OrderDetailRespDTO orderDetail(Long orderId, String status) {
         return new OrderDetailRespDTO(
                 orderId,
                 "EO" + orderId,
@@ -176,7 +209,7 @@ class UserServiceImplTest {
                 2001L,
                 5001L,
                 new BigDecimal("1280.00"),
-                "PENDING_PAYMENT",
+                status,
                 LocalDateTime.now().plusMinutes(15),
                 List.of());
     }

@@ -102,6 +102,14 @@ public class InMemoryTicketRepository implements TicketRepository {
         issues.put(issueDO.getId(), issueDO);
     }
 
+    @Override
+    public List<TicketIssueDO> listIssuesByLockId(Long lockId) {
+        return issues.values()
+                .stream()
+                .filter(each -> lockId.equals(each.getLockId()))
+                .toList();
+    }
+
     private void stock(Long showId, Long categoryId, String name, BigDecimal price, Integer totalStock, Integer seatSelectable) {
         TicketStockDO entity = new TicketStockDO();
         entity.setId(stockKey(showId, categoryId));

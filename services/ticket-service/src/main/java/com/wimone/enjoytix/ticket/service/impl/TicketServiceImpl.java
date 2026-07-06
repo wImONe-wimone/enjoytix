@@ -14,6 +14,7 @@ import com.wimone.enjoytix.ticket.dao.entity.TicketStockDO;
 import com.wimone.enjoytix.ticket.dto.req.TicketIssueReqDTO;
 import com.wimone.enjoytix.ticket.dto.req.TicketLockReqDTO;
 import com.wimone.enjoytix.ticket.dto.req.TicketReleaseReqDTO;
+import com.wimone.enjoytix.ticket.dto.req.TicketRefundReqDTO;
 import com.wimone.enjoytix.ticket.dto.resp.SeatAvailabilityRespDTO;
 import com.wimone.enjoytix.ticket.dto.resp.TicketAvailabilityRespDTO;
 import com.wimone.enjoytix.ticket.dto.resp.TicketIssueRespDTO;
@@ -158,6 +159,23 @@ public class TicketServiceImpl implements TicketService {
         });
     }
 
+    @Override
+    public Boolean refund(Long userId, TicketRefundReqDTO requestParam) {
+        TicketLockDO lockDO = findLock(requestParam.getLockId());
+        return lockTemplate.execute(TicketLockKeys.showStock(lockDO.getShowId()), LOCK_WAIT_SECONDS, LOCK_LEASE_SECONDS, TimeUnit.SECONDS, () -> {
+            assertOwner(userId, lockDO);
+            if (TicketLockStatusEnum.REFUNDED.name().equals(lockDO.getStatus())) {
+                return Boolean.TRUE;
+            }
+            if (!TicketLockStatusEnum.ISSUED.name().equals(lockDO.getStatus())) {
+                throw new ClientException("Only issued tickets can be refunded");
+            }
+            validateIssuedOrder(lockDO, requestParam.getOrderId());
+            refundIssuedTickets(lockDO);
+            return Boolean.TRUE;
+        });
+    }
+
     private void validateAndLockSeats(Long showId, Long categoryId, List<Long> seatIds) {
         for (Long seatId : seatIds) {
             SeatStockDO seat = repository.findSeat(showId, seatId).orElseThrow(() -> new ClientException("Seat does not exist"));
@@ -205,6 +223,46 @@ public class TicketServiceImpl implements TicketService {
             ticketCodes.add(issueDO.getTicketCode());
         }
         return ticketCodes;
+    }
+
+    private void validateIssuedOrder(TicketLockDO lockDO, Long orderId) {
+        List<TicketIssueDO> issues = repository.listIssuesByLockId(lockDO.getId());
+        if (issues.isEmpty()) {
+            throw new ClientException("Issued ticket record does not exist");
+        }
+        boolean orderMatched = issues.stream().allMatch(each -> orderId.equals(each.getOrderId()));
+        if (!orderMatched) {
+            throw new ClientException("Issued tickets do not belong to refund order");
+        }
+        validateRefundableSeats(lockDO);
+    }
+
+    private void validateRefundableSeats(TicketLockDO lockDO) {
+        for (Long seatId : normalizeSeatIds(lockDO.getSeatIds())) {
+            repository.findSeat(lockDO.getShowId(), seatId).ifPresent(seat -> {
+                if (seat.getLockId() != null && !lockDO.getId().equals(seat.getLockId())) {
+                    throw new ClientException("Seat does not belong to issued ticket lock");
+                }
+            });
+        }
+    }
+
+    private void refundIssuedTickets(TicketLockDO lockDO) {
+        List<Long> seatIds = normalizeSeatIds(lockDO.getSeatIds());
+        TicketStockDO stock = findStock(lockDO.getShowId(), lockDO.getCategoryId());
+        stock.setSoldStock(Math.max(0, stock.getSoldStock() - lockDO.getQuantity()));
+        repository.saveStock(stock);
+        for (Long seatId : seatIds) {
+            repository.findSeat(lockDO.getShowId(), seatId).ifPresent(seat -> {
+                seat.setStatus(SeatStockStatusEnum.AVAILABLE.name());
+                seat.setLockId(null);
+                repository.saveSeat(seat);
+            });
+        }
+        lockDO.setSeatIds(seatIds);
+        lockDO.setStatus(TicketLockStatusEnum.REFUNDED.name());
+        lockDO.setUpdateTime(LocalDateTime.now());
+        repository.saveLock(lockDO);
     }
 
     private List<Long> anonymousSeatIds(Integer quantity) {

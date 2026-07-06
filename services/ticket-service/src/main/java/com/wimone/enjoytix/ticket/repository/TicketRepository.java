@@ -32,4 +32,6 @@ public interface TicketRepository {
     List<TicketLockDO> listLocks(Long showId);
 
     void saveIssue(TicketIssueDO issueDO);
+
+    List<TicketIssueDO> listIssuesByLockId(Long lockId);
 }

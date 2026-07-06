@@ -16,6 +16,7 @@ public class InMemoryPayRepository implements PayRepository {
     private final Map<Long, PayDO> payOrders = new ConcurrentHashMap<>();
     private final Map<Long, Long> payIdByOrderId = new ConcurrentHashMap<>();
     private final Map<Long, RefundDO> refunds = new ConcurrentHashMap<>();
+    private final Map<Long, Long> refundIdByOrderId = new ConcurrentHashMap<>();
 
     @Override
     public void savePay(PayDO payDO) {
@@ -37,5 +38,12 @@ public class InMemoryPayRepository implements PayRepository {
     @Override
     public void saveRefund(RefundDO refundDO) {
         refunds.put(refundDO.getId(), refundDO);
+        refundIdByOrderId.put(refundDO.getOrderId(), refundDO.getId());
+    }
+
+    @Override
+    public Optional<RefundDO> findRefundByOrderId(Long orderId) {
+        Long refundId = refundIdByOrderId.get(orderId);
+        return refundId == null ? Optional.empty() : Optional.ofNullable(refunds.get(refundId));
     }
 }

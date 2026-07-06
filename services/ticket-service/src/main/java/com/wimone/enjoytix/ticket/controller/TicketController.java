@@ -9,6 +9,7 @@ import com.wimone.enjoytix.ticket.common.TicketConstants;
 import com.wimone.enjoytix.ticket.dto.req.TicketIssueReqDTO;
 import com.wimone.enjoytix.ticket.dto.req.TicketLockReqDTO;
 import com.wimone.enjoytix.ticket.dto.req.TicketReleaseReqDTO;
+import com.wimone.enjoytix.ticket.dto.req.TicketRefundReqDTO;
 import com.wimone.enjoytix.ticket.dto.resp.SeatAvailabilityRespDTO;
 import com.wimone.enjoytix.ticket.dto.resp.TicketAvailabilityRespDTO;
 import com.wimone.enjoytix.ticket.dto.resp.TicketIssueRespDTO;
@@ -113,5 +114,22 @@ public class TicketController {
             @RequestHeader(TicketConstants.USER_ID_HEADER) Long userId,
             @Valid @RequestBody TicketIssueReqDTO requestParam) {
         return Results.success(ticketService.issue(userId, requestParam));
+    }
+
+    // 閫€绁ㄥ悗閲婃斁宸插嚭绁ㄧ殑搴т綅鍜屽簱瀛?
+    @OperationLog("ticket-refund")
+    @Operation(summary = "Refund issued tickets", description = "Return issued ticket stock or seats after a successful refund.")
+    @Idempotent(
+            key = "'ticket:refund:' + #p0 + ':' + #p1.lockId + ':' + #p1.orderId",
+            type = IdempotentTypeEnum.SPEL,
+            keyTimeout = 10,
+            message = "Ticket refund request is being processed"
+    )
+    @PostMapping("/refund")
+    public Result<Boolean> refund(
+            @Parameter(description = "Current user id.", required = true)
+            @RequestHeader(TicketConstants.USER_ID_HEADER) Long userId,
+            @Valid @RequestBody TicketRefundReqDTO requestParam) {
+        return Results.success(ticketService.refund(userId, requestParam));
     }
 }

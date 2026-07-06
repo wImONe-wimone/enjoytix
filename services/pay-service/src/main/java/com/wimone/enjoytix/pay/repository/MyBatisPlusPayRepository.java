@@ -51,4 +51,11 @@ public class MyBatisPlusPayRepository implements PayRepository {
         }
         refundMapper.updateById(refundDO);
     }
+
+    @Override
+    public Optional<RefundDO> findRefundByOrderId(Long orderId) {
+        return Optional.ofNullable(refundMapper.selectOne(Wrappers.lambdaQuery(RefundDO.class)
+                .eq(RefundDO::getOrderId, orderId)
+                .last("LIMIT 1")));
+    }
 }

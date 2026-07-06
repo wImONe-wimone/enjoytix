@@ -10,6 +10,7 @@ import com.wimone.enjoytix.pay.dao.entity.RefundDO;
 import com.wimone.enjoytix.pay.dto.req.MockPayReqDTO;
 import com.wimone.enjoytix.pay.dto.req.PayCreateReqDTO;
 import com.wimone.enjoytix.pay.dto.req.RefundApplyReqDTO;
+import com.wimone.enjoytix.pay.dto.req.RefundByOrderReqDTO;
 import com.wimone.enjoytix.pay.dto.resp.PayRespDTO;
 import com.wimone.enjoytix.pay.dto.resp.RefundRespDTO;
 import com.wimone.enjoytix.pay.remote.OrderRemoteService;
@@ -79,13 +80,40 @@ public class PayServiceImpl implements PayService {
     public synchronized RefundRespDTO refund(Long userId, RefundApplyReqDTO requestParam) {
         PayDO payDO = findPay(requestParam.getPayId());
         assertOwner(userId, payDO);
+        return refundPayOrder(payDO, requestParam.getReason());
+    }
+
+    @Override
+    public synchronized RefundRespDTO refundByOrder(Long userId, RefundByOrderReqDTO requestParam) {
+        PayDO payDO = payRepository.findPayByOrderId(requestParam.getOrderId())
+                .orElseThrow(() -> new ClientException("Pay order does not exist for order"));
+        assertOwner(userId, payDO);
+        return refundPayOrder(payDO, requestParam.getReason());
+    }
+
+    private RefundRespDTO refundPayOrder(PayDO payDO, String reason) {
+        var existingRefund = payRepository.findRefundByOrderId(payDO.getOrderId());
+        if (existingRefund.isPresent()) {
+            if (!PayStatusEnum.REFUNDED.name().equals(payDO.getStatus())) {
+                payDO.setStatus(PayStatusEnum.REFUNDED.name());
+                payDO.setUpdateTime(LocalDateTime.now());
+                payRepository.savePay(payDO);
+            }
+            return convert(existingRefund.get());
+        }
+        if (PayStatusEnum.REFUNDED.name().equals(payDO.getStatus())) {
+            return createRefund(payDO, reason);
+        }
         if (!PayStatusEnum.SUCCESS.name().equals(payDO.getStatus())) {
             throw new ClientException("Only successful pay orders can be refunded");
         }
         payDO.setStatus(PayStatusEnum.REFUNDED.name());
         payDO.setUpdateTime(LocalDateTime.now());
         payRepository.savePay(payDO);
+        return createRefund(payDO, reason);
+    }
 
+    private RefundRespDTO createRefund(PayDO payDO, String reason) {
         RefundDO refundDO = new RefundDO();
         refundDO.setId(idGeneratorManager.nextId());
         refundDO.setPayId(payDO.getId());
@@ -93,12 +121,12 @@ public class PayServiceImpl implements PayService {
         refundDO.setUserId(payDO.getUserId());
         refundDO.setAmount(payDO.getAmount());
         refundDO.setStatus(RefundStatusEnum.SUCCESS.name());
-        refundDO.setReason(requestParam.getReason());
+        refundDO.setReason(reason);
         refundDO.setCreateTime(LocalDateTime.now());
         refundDO.setUpdateTime(LocalDateTime.now());
         refundDO.setDelFlag(0);
         payRepository.saveRefund(refundDO);
-        return new RefundRespDTO(refundDO.getId(), refundDO.getPayId(), refundDO.getOrderId(), refundDO.getAmount(), refundDO.getStatus(), refundDO.getReason());
+        return convert(refundDO);
     }
 
     private PayRespDTO createNewPay(Long userId, PayCreateReqDTO requestParam) {
@@ -147,6 +175,17 @@ public class PayServiceImpl implements PayService {
                 payDO.getStatus(),
                 "mock://pay/" + payDO.getId(),
                 payDO.getPaidTime()
+        );
+    }
+
+    private RefundRespDTO convert(RefundDO refundDO) {
+        return new RefundRespDTO(
+                refundDO.getId(),
+                refundDO.getPayId(),
+                refundDO.getOrderId(),
+                refundDO.getAmount(),
+                refundDO.getStatus(),
+                refundDO.getReason()
         );
     }
 }

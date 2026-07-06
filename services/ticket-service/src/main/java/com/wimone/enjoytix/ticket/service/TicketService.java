@@ -3,6 +3,7 @@ package com.wimone.enjoytix.ticket.service;
 import com.wimone.enjoytix.ticket.dto.req.TicketIssueReqDTO;
 import com.wimone.enjoytix.ticket.dto.req.TicketLockReqDTO;
 import com.wimone.enjoytix.ticket.dto.req.TicketReleaseReqDTO;
+import com.wimone.enjoytix.ticket.dto.req.TicketRefundReqDTO;
 import com.wimone.enjoytix.ticket.dto.resp.SeatAvailabilityRespDTO;
 import com.wimone.enjoytix.ticket.dto.resp.TicketAvailabilityRespDTO;
 import com.wimone.enjoytix.ticket.dto.resp.TicketIssueRespDTO;
@@ -21,4 +22,6 @@ public interface TicketService {
     Boolean release(Long userId, TicketReleaseReqDTO requestParam);
 
     TicketIssueRespDTO issue(Long userId, TicketIssueReqDTO requestParam);
+
+    Boolean refund(Long userId, TicketRefundReqDTO requestParam);
 }

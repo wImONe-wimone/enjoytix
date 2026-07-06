@@ -14,4 +14,6 @@ public interface PayRepository {
     Optional<PayDO> findPayByOrderId(Long orderId);
 
     void saveRefund(RefundDO refundDO);
+
+    Optional<RefundDO> findRefundByOrderId(Long orderId);
 }

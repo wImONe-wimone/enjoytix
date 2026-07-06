@@ -12,8 +12,8 @@
   const toastRoot = document.querySelector("#toast-root");
 
   const state = {
-    token: localStorage.getItem(STORAGE_TOKEN) || "dev-1",
-    user: readJson(STORAGE_USER),
+    token: "",
+    user: null,
     catalogQuery: {},
     currentDetail: null,
     detailSelection: {},
@@ -21,17 +21,17 @@
     busy: false
   };
 
-  if (!localStorage.getItem(STORAGE_TOKEN)) {
-    localStorage.setItem(STORAGE_TOKEN, state.token);
-  }
+  localStorage.removeItem(STORAGE_TOKEN);
+  localStorage.removeItem(STORAGE_USER);
 
   window.addEventListener("hashchange", route);
   document.addEventListener("click", handleGlobalClick);
-  document.addEventListener("submit", handleGlobalSubmit);
 
   renderAuth();
   route();
-  refreshUser();
+  if (state.token) {
+    refreshUser();
+  }
 
   function handleGlobalClick(event) {
     const action = event.target.closest("[data-action]");
@@ -51,15 +51,11 @@
     if (name === "logout") {
       logout();
     }
-  }
-
-  function handleGlobalSubmit(event) {
-    if (event.target.id === "token-form") {
-      event.preventDefault();
-      const token = new FormData(event.target).get("token").toString().trim();
-      setToken(token || "dev-1", null);
-      toast("已应用访问令牌", "success");
-      route();
+    if (name === "open-refund-rollback") {
+      openRefundRollbackDialog(action.dataset.orderId);
+    }
+    if (name === "open-order-refund") {
+      openOrderRefundDialog(action.dataset.orderId);
     }
   }
 
@@ -94,18 +90,16 @@
   async function renderCatalog(query) {
     state.catalogQuery = {
       keyword: query.keyword || "",
-      city: query.city || "",
       performanceType: query.performanceType || "",
       showDate: query.showDate || "",
       current: Number(query.current || 1),
       size: 12
     };
-    renderLoading("正在加载场次");
+    renderLoading("正在加载文娱票务项目");
     try {
       const params = new URLSearchParams();
       params.set("current", state.catalogQuery.current);
       params.set("size", state.catalogQuery.size);
-      if (state.catalogQuery.city) params.set("city", state.catalogQuery.city);
       if (state.catalogQuery.performanceType) params.set("performanceType", state.catalogQuery.performanceType);
       if (state.catalogQuery.keyword) params.set("artistName", state.catalogQuery.keyword);
       if (state.catalogQuery.showDate) params.set("showDate", state.catalogQuery.showDate);
@@ -113,7 +107,7 @@
       app.innerHTML = catalogTemplate(page, state.catalogQuery);
       bindCatalog(page);
     } catch (error) {
-      renderError("场次加载失败", error, () => renderCatalog(query));
+      renderError("项目列表加载失败", error, () => renderCatalog(query));
     }
   }
 
@@ -125,7 +119,7 @@
       <section class="band">
         <div class="section-title">
           <div>
-            <h1>演出与电影场次</h1>
+            <h1>文娱票务项目</h1>
             <p>共 ${total} 个可购项目</p>
           </div>
           <div class="button-row">
@@ -136,10 +130,6 @@
           <div class="field">
             <label for="keyword">艺人/团队</label>
             <input id="keyword" name="keyword" value="${escapeAttr(query.keyword)}" placeholder="Aurora / Theatre">
-          </div>
-          <div class="field">
-            <label for="city">城市</label>
-            <input id="city" name="city" value="${escapeAttr(query.city)}" placeholder="Shanghai">
           </div>
           <div class="field">
             <label for="performanceType">类型</label>
@@ -168,12 +158,14 @@
             <span class="muted">第 ${query.current} / ${maxPage} 页</span>
             <button class="btn" data-page="${query.current + 1}" ${query.current >= maxPage ? "disabled" : ""}>下一页</button>
           </div>
-        ` : emptyState("没有匹配场次", "换一个城市、日期或类型再试。")}
+        ` : emptyState("没有匹配项目", "换一个日期、类型或艺人/团队再试。")}
       </section>
     `;
   }
 
   function performanceCard(item) {
+    const venue = item.venue || {};
+    const venueAddress = formatVenueAddress(venue) || "-";
     return `
       <article class="performance-card">
         <a class="poster" href="#/performance/${item.performanceId}" aria-label="${escapeAttr(item.title)}">
@@ -183,11 +175,12 @@
         <div class="performance-body">
           <h3><a href="#/performance/${item.performanceId}">${escapeHtml(item.title)}</a></h3>
           <ul class="meta-list">
-            <li><strong>${escapeHtml(item.city || "-")}</strong> · ${escapeHtml(item.venue?.name || "-")}</li>
+            <li><strong>${escapeHtml(venue.name || "-")}</strong></li>
+            <li>${escapeHtml(venueAddress)}</li>
             <li>${escapeHtml(item.artist?.name || "-")}</li>
             <li>${formatDateTime(item.earliestShowTime)}</li>
           </ul>
-          <a class="btn primary" href="#/performance/${item.performanceId}">选择场次</a>
+          <a class="btn primary" href="#/performance/${item.performanceId}">选购门票</a>
         </div>
       </article>
     `;
@@ -199,7 +192,7 @@
       event.preventDefault();
       const data = Object.fromEntries(new FormData(form).entries());
       const params = new URLSearchParams();
-      for (const key of ["keyword", "city", "performanceType", "showDate"]) {
+      for (const key of ["keyword", "performanceType", "showDate"]) {
         if (data[key]) params.set(key, data[key]);
       }
       window.location.hash = `#/${params.toString() ? `?${params.toString()}` : ""}`;
@@ -209,7 +202,7 @@
         const targetPage = Number(button.dataset.page);
         if (!targetPage || targetPage < 1) return;
         const params = new URLSearchParams();
-        for (const key of ["keyword", "city", "performanceType", "showDate"]) {
+        for (const key of ["keyword", "performanceType", "showDate"]) {
           if (state.catalogQuery[key]) params.set(key, state.catalogQuery[key]);
         }
         params.set("current", targetPage);
@@ -219,12 +212,12 @@
   }
 
   async function renderPerformanceDetail(performanceId, query) {
-    renderLoading("正在加载场次详情");
+    renderLoading("正在加载项目详情");
     try {
       const detail = await apiGet(`/api/performance/${encodeURIComponent(performanceId)}`);
       const showId = Number(query.showId || detail.sessions?.[0]?.showId || 0);
       if (!showId) {
-        app.innerHTML = emptyState("暂无可售场次", "该项目还没有开放场次。");
+        app.innerHTML = emptyState("暂无可售时间", "该项目还没有开放售票时间。");
         return;
       }
       const [availability, seatMap, seats] = await Promise.all([
@@ -236,7 +229,7 @@
       ensureSelection(showId, availability);
       renderDetailFromState();
     } catch (error) {
-      renderError("场次详情加载失败", error, () => renderPerformanceDetail(performanceId, query));
+      renderError("项目详情加载失败", error, () => renderPerformanceDetail(performanceId, query));
     }
   }
 
@@ -248,6 +241,7 @@
     const show = detail.sessions.find((item) => Number(item.showId) === Number(showId)) || detail.sessions[0];
     const category = availability.find((item) => Number(item.categoryId) === Number(selection.categoryId));
     const selectedSeats = selectedSeatDetails(seats, selection.selectedSeats);
+    const venueAddress = formatVenueAddress(detail.venue) || "-";
     app.innerHTML = `
       <section class="detail-layout">
         <div class="detail-main">
@@ -257,19 +251,19 @@
             </div>
             <div class="detail-copy">
               <div class="button-row">
-                <a class="btn ghost compact" href="#/">返回场次</a>
+                <a class="btn ghost compact" href="#/">返回项目</a>
                 <span class="pill ok">${typeText(detail.performanceType)}</span>
               </div>
               <h1>${escapeHtml(detail.title)}</h1>
               <p>${escapeHtml(detail.description || "")}</p>
               <ul class="meta-list">
-                <li><strong>${escapeHtml(detail.venue?.name || "-")}</strong> · ${escapeHtml(detail.venue?.address || detail.city || "-")}</li>
+                <li><strong>${escapeHtml(detail.venue?.name || "-")}</strong> · ${escapeHtml(venueAddress)}</li>
                 <li>${escapeHtml(detail.artist?.name || "-")}</li>
               </ul>
             </div>
           </div>
           <section class="panel">
-            <h2>选择场次</h2>
+            <h2>选择演出时间</h2>
             <div class="segmented">
               ${(detail.sessions || []).map((item) => `
                 <button type="button" data-show-id="${item.showId}" class="${Number(item.showId) === Number(showId) ? "active" : ""}">
@@ -296,7 +290,7 @@
 
   function categoryPanelTemplate(availability, selectedCategoryId) {
     if (!availability.length) {
-      return emptyState("暂无票档", "该场次当前没有可售票档。");
+      return emptyState("暂无票档", "该演出时间当前没有可售票档。");
     }
     return `
       <h2>选择票档</h2>
@@ -330,7 +324,7 @@
       `;
     }
     if (!seatMap || !Array.isArray(seatMap.seats) || !seatMap.seats.length) {
-      return emptyState("暂无座位图", "该场次还没有座位图数据。");
+      return emptyState("暂无座位图", "该演出时间还没有座位图数据。");
     }
     const seatState = new Map(seats.map((seat) => [String(seat.seatId), seat]));
     const rows = [];
@@ -393,7 +387,7 @@
     return `
       <h2>订单确认</h2>
       <div class="summary-line"><span>项目</span><strong>${escapeHtml(detail.title)}</strong></div>
-      <div class="summary-line"><span>场次</span><strong>${formatDateTime(show?.showTime)}</strong></div>
+      <div class="summary-line"><span>演出时间</span><strong>${formatDateTime(show?.showTime)}</strong></div>
       <div class="summary-line"><span>票档</span><strong>${escapeHtml(category?.categoryName || "-")}</strong></div>
       <div class="summary-line"><span>座位</span><strong>${selectedSeats.length ? selectedSeats.map((seat) => escapeHtml(seat.seatNo)).join("、") : "未选择"}</strong></div>
       <div class="summary-line"><span>数量</span><strong>${quantity}</strong></div>
@@ -564,7 +558,7 @@
           <div class="section-title">
             <div>
               <h1>订单 ${escapeHtml(order.orderSn || order.orderId)}</h1>
-              <p>${context?.performanceTitle ? escapeHtml(context.performanceTitle) : `场次 ${escapeHtml(order.showId)}`}</p>
+              <p>${context?.performanceTitle ? escapeHtml(context.performanceTitle) : `演出时间 #${escapeHtml(order.showId)}`}</p>
             </div>
             ${statusPill(order.status)}
           </div>
@@ -604,7 +598,11 @@
             ${pay ? `<button class="btn primary" type="button" data-pay-success="${escapeAttr(payId)}" ${state.busy ? "disabled" : ""}>模拟支付成功</button>` : ""}
             <button class="btn danger" type="button" data-order-cancel="${escapeAttr(resolvedOrderId)}" ${state.busy ? "disabled" : ""}>取消订单</button>
           ` : ""}
-          ${paid ? `<a class="btn primary" href="${ticketsHash(resolvedOrderId)}">查看电子票</a>` : ""}
+          ${paid ? `
+            <a class="btn primary" href="${ticketsHash(resolvedOrderId)}">查看电子票</a>
+            <button class="btn danger" type="button" data-action="open-order-refund" data-order-id="${escapeAttr(resolvedOrderId)}" ${state.busy ? "disabled" : ""}>申请退票</button>
+          ` : ""}
+          ${order.status === "REFUNDING" ? `<button class="btn danger" type="button" data-action="open-refund-rollback" data-order-id="${escapeAttr(resolvedOrderId)}" ${state.busy ? "disabled" : ""}>退款回滚</button>` : ""}
           ${!pending && !paid ? `<p class="muted">当前状态不可继续支付。</p>` : ""}
         </aside>
       </section>
@@ -700,6 +698,7 @@
         });
       });
     }
+    const unavailableState = ticketUnavailableState(order.status);
     if (order.status !== "PAID") {
       return `
         <section class="band">
@@ -710,7 +709,7 @@
             </div>
             ${statusPill(order.status)}
           </div>
-          ${emptyState("尚未出票", "订单支付成功后会生成电子票。")}
+          ${emptyState(unavailableState.title, unavailableState.description)}
           <div class="button-row">
             <a class="btn primary" href="${checkoutHash(resolvedOrderId)}">返回订单</a>
             <a class="btn" href="#/orders">订单列表</a>
@@ -723,7 +722,7 @@
         <div class="section-title">
           <div>
             <h1>电子票</h1>
-            <p>${escapeHtml(performance?.title || context?.performanceTitle || `场次 ${order.showId}`)}</p>
+            <p>${escapeHtml(performance?.title || context?.performanceTitle || `演出时间 #${order.showId}`)}</p>
           </div>
           ${statusPill(order.status)}
         </div>
@@ -746,6 +745,7 @@
           `).join("")}
         </div>
         <div class="button-row">
+          <button class="btn danger" type="button" data-action="open-order-refund" data-order-id="${escapeAttr(resolvedOrderId)}" ${state.busy ? "disabled" : ""}>申请退票</button>
           <a class="btn" href="#/orders">订单列表</a>
           <a class="btn" href="#/">继续购票</a>
         </div>
@@ -789,12 +789,14 @@
         </div>
         <ul class="meta-list">
           <li><strong>订单号</strong> ${escapeHtml(order.orderSn || order.orderId)}</li>
-          <li><strong>场次</strong> ${context?.showTime ? formatDateTime(context.showTime) : `#${escapeHtml(order.showId)}`}</li>
+          <li><strong>演出时间</strong> ${context?.showTime ? formatDateTime(context.showTime) : `#${escapeHtml(order.showId)}`}</li>
           <li><strong>金额</strong> ${formatMoney(order.totalAmount)} · <strong>截止</strong> ${formatDateTime(order.payExpireTime)}</li>
         </ul>
         <div class="button-row">
           <a class="btn primary" href="${order.status === "PAID" ? ticketsHash(orderId) : checkoutHash(orderId)}">${order.status === "PAID" ? "电子票" : "查看订单"}</a>
           ${order.status === "PENDING_PAYMENT" ? `<a class="btn" href="${checkoutHash(orderId)}">去支付</a>` : ""}
+          ${order.status === "PAID" ? `<button class="btn danger" type="button" data-action="open-order-refund" data-order-id="${escapeAttr(orderId)}" ${state.busy ? "disabled" : ""}>申请退票</button>` : ""}
+          ${order.status === "REFUNDING" ? `<button class="btn danger" type="button" data-action="open-refund-rollback" data-order-id="${escapeAttr(orderId)}" ${state.busy ? "disabled" : ""}>退款回滚</button>` : ""}
         </div>
       </article>
     `;
@@ -802,15 +804,16 @@
 
   function renderAuth() {
     const parsedUserId = parseDevUserId(state.token);
+    const label = state.user?.username || (parsedUserId ? `用户 #${parsedUserId}` : "未登录");
     authRoot.innerHTML = `
       <div class="auth-inline">
-        <form id="token-form" class="auth-inline">
-          <input class="input token-input" name="token" value="${escapeAttr(state.token || "")}" aria-label="访问令牌">
-          <button class="btn compact" type="submit">应用</button>
-        </form>
-        <button class="btn compact" type="button" data-action="open-login">登录</button>
-        <button class="btn compact" type="button" data-action="open-register">注册</button>
-        <button class="btn ghost compact" type="button" data-action="logout">${state.user?.username ? escapeHtml(state.user.username) : `用户 #${parsedUserId || "-"}`}</button>
+        ${state.token ? `
+          <button class="btn compact" type="button">${escapeHtml(label)}</button>
+          <button class="btn ghost compact" type="button" data-action="logout">退出</button>
+        ` : `
+          <button class="btn compact" type="button" data-action="open-login">登录</button>
+          <button class="btn compact" type="button" data-action="open-register">注册</button>
+        `}
       </div>
     `;
   }
@@ -842,10 +845,6 @@
                 <div class="field">
                   <label for="auth-real-name">姓名</label>
                   <input id="auth-real-name" name="realName">
-                </div>
-                <div class="field">
-                  <label for="auth-id-card">证件号</label>
-                  <input id="auth-id-card" name="idCard">
                 </div>
               `}
               <button class="btn primary" type="submit">${login ? "登录" : "注册并使用"}</button>
@@ -888,10 +887,16 @@
   }
 
   async function refreshUser() {
+    if (!state.token) {
+      state.user = null;
+      localStorage.removeItem(STORAGE_USER);
+      renderAuth();
+      return;
+    }
     try {
       const user = await apiGet("/api/user/me");
       state.user = user;
-      localStorage.setItem(STORAGE_USER, JSON.stringify(user));
+      localStorage.removeItem(STORAGE_USER);
       renderAuth();
     } catch (_error) {
       state.user = null;
@@ -901,21 +906,19 @@
   }
 
   function setToken(token, user) {
-    state.token = token;
-    state.user = user;
-    localStorage.setItem(STORAGE_TOKEN, token);
-    if (user) {
-      localStorage.setItem(STORAGE_USER, JSON.stringify(user));
-    } else {
-      localStorage.removeItem(STORAGE_USER);
+    state.token = token || "";
+    state.user = user || null;
+    localStorage.removeItem(STORAGE_TOKEN);
+    localStorage.removeItem(STORAGE_USER);
+    if (!user && state.token) {
       refreshUser();
     }
     renderAuth();
   }
 
   function logout() {
-    setToken("dev-1", null);
-    toast("已切换到 dev-1", "success");
+    setToken("", null);
+    toast("已退出登录", "success");
   }
 
   function closeDialog() {
@@ -923,9 +926,242 @@
   }
 
   function setActionButtonsDisabled(disabled) {
-    document.querySelectorAll("[data-create-order], [data-pay-create], [data-pay-success], [data-order-cancel]").forEach((button) => {
+    document.querySelectorAll("[data-create-order], [data-pay-create], [data-pay-success], [data-order-cancel], [data-action='open-order-refund'], [data-action='open-refund-rollback']").forEach((button) => {
       button.disabled = disabled;
     });
+  }
+
+  function openOrderRefundDialog(orderId) {
+    if (!state.token) {
+      toast("请先登录后再申请退票", "error");
+      openAuthDialog("login");
+      return;
+    }
+    const resolvedOrderId = normalizeId(orderId);
+    if (!/^\d+$/.test(resolvedOrderId)) {
+      toast("订单号无效，无法申请退票", "error");
+      return;
+    }
+    dialogRoot.innerHTML = `
+      <div class="dialog-backdrop">
+        <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="order-refund-title">
+          <div class="dialog-head">
+            <h2 id="order-refund-title">申请退票</h2>
+            <button class="btn compact" type="button" data-action="close-dialog">关闭</button>
+          </div>
+          <div class="dialog-body">
+            <form id="order-refund-form" class="form-grid">
+              <div class="field">
+                <label for="order-refund-order-id">订单号</label>
+                <input id="order-refund-order-id" name="orderId" value="${escapeAttr(resolvedOrderId)}" readonly required>
+              </div>
+              <div class="field">
+                <label for="order-refund-reason">退票原因（选填）</label>
+                <textarea id="order-refund-reason" name="reason" rows="4" maxlength="255" placeholder="如行程变更、无法按时观演等"></textarea>
+              </div>
+              <p class="form-error" data-order-refund-error hidden></p>
+              <div class="button-row">
+                <button class="btn danger" type="submit" data-order-refund-submit>提交退票申请</button>
+                <button class="btn" type="button" data-action="close-dialog">取消</button>
+              </div>
+            </form>
+          </div>
+        </section>
+      </div>
+    `;
+    const form = dialogRoot.querySelector("#order-refund-form");
+    form.addEventListener("submit", submitOrderRefund);
+    dialogRoot.querySelector("textarea").focus();
+  }
+
+  async function submitOrderRefund(event) {
+    event.preventDefault();
+    const form = event.target;
+    const payload = validateOrderRefundForm(form);
+    const errorNode = form.querySelector("[data-order-refund-error]");
+    if (!payload.valid) {
+      showFormError(errorNode, payload.message);
+      return;
+    }
+    if (!window.confirm("确认提交退票申请？退款完成后电子票将失效，座位会释放。")) {
+      return;
+    }
+    const submit = form.querySelector("[data-order-refund-submit]");
+    submit.disabled = true;
+    submit.textContent = "提交中";
+    showFormError(errorNode, "");
+    setActionButtonsDisabled(true);
+    state.busy = true;
+    try {
+      const refund = await requestOrderRefund(payload.orderId, payload.reason);
+      closeDialog();
+      toast(refund?.orderStatus === "REFUNDED" ? "退票完成，退款已处理" : "退票申请已提交", "success");
+      syncOrderAfterRefund(payload.orderId);
+    } catch (error) {
+      showFormError(errorNode, apiMessage(error));
+      toast(apiMessage(error), "error");
+      submit.disabled = false;
+      submit.textContent = "提交退票申请";
+    } finally {
+      state.busy = false;
+      setActionButtonsDisabled(false);
+    }
+  }
+
+  function validateOrderRefundForm(form) {
+    const data = Object.fromEntries(new FormData(form).entries());
+    const orderId = normalizeId(data.orderId);
+    const reason = String(data.reason || "").trim();
+    if (!/^\d+$/.test(orderId)) {
+      return { valid: false, message: "订单号必须为数字" };
+    }
+    if (reason.length > 255) {
+      return { valid: false, message: "退票原因不能超过 255 个字符" };
+    }
+    return { valid: true, orderId, reason };
+  }
+
+  async function requestOrderRefund(orderId, reason) {
+    return apiPost("/api/user/orders/refund", {
+      orderId: normalizeId(orderId),
+      reason
+    });
+  }
+
+  function syncOrderAfterRefund(orderId) {
+    const resolvedOrderId = normalizeId(orderId);
+    const { path } = parseHash();
+    if (path.startsWith("/checkout/") && normalizeId(path.split("/")[2]) === resolvedOrderId) {
+      renderCheckout(resolvedOrderId);
+      return;
+    }
+    if (path.startsWith("/tickets/") && normalizeId(path.split("/")[2]) === resolvedOrderId) {
+      renderTickets(resolvedOrderId);
+      return;
+    }
+    if (path === "/orders") {
+      renderOrders();
+    }
+  }
+
+  function openRefundRollbackDialog(orderId) {
+    const resolvedOrderId = normalizeId(orderId);
+    if (!/^\d+$/.test(resolvedOrderId)) {
+      toast("订单号无效，无法发起退款回滚", "error");
+      return;
+    }
+    dialogRoot.innerHTML = `
+      <div class="dialog-backdrop">
+        <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="refund-rollback-title">
+          <div class="dialog-head">
+            <h2 id="refund-rollback-title">退款回滚</h2>
+            <button class="btn compact" type="button" data-action="close-dialog">关闭</button>
+          </div>
+          <div class="dialog-body">
+            <form id="refund-rollback-form" class="form-grid">
+              <div class="field">
+                <label for="refund-rollback-order-id">订单号</label>
+                <input id="refund-rollback-order-id" name="orderId" value="${escapeAttr(resolvedOrderId)}" readonly required>
+              </div>
+              <div class="field">
+                <label for="refund-rollback-reason">回滚原因</label>
+                <textarea id="refund-rollback-reason" name="reason" rows="4" maxlength="255" required placeholder="支付退款失败，恢复订单状态"></textarea>
+              </div>
+              <p class="form-error" data-refund-rollback-error hidden></p>
+              <div class="button-row">
+                <button class="btn danger" type="submit" data-refund-rollback-submit>提交回滚</button>
+                <button class="btn" type="button" data-action="close-dialog">取消</button>
+              </div>
+            </form>
+          </div>
+        </section>
+      </div>
+    `;
+    const form = dialogRoot.querySelector("#refund-rollback-form");
+    form.addEventListener("submit", submitRefundRollback);
+    dialogRoot.querySelector("textarea").focus();
+  }
+
+  async function submitRefundRollback(event) {
+    event.preventDefault();
+    const form = event.target;
+    const payload = validateRefundRollbackForm(form);
+    const errorNode = form.querySelector("[data-refund-rollback-error]");
+    if (!payload.valid) {
+      showFormError(errorNode, payload.message);
+      return;
+    }
+    if (!window.confirm("确认提交退款回滚？")) {
+      return;
+    }
+    const submit = form.querySelector("[data-refund-rollback-submit]");
+    submit.disabled = true;
+    submit.textContent = "提交中";
+    showFormError(errorNode, "");
+    setActionButtonsDisabled(true);
+    state.busy = true;
+    try {
+      const order = await requestOrderRefundRollback(payload.orderId, payload.reason);
+      closeDialog();
+      toast("退款回滚已完成", "success");
+      syncOrderAfterRefundRollback(order, payload.orderId);
+    } catch (error) {
+      showFormError(errorNode, apiMessage(error));
+      toast(apiMessage(error), "error");
+      submit.disabled = false;
+      submit.textContent = "提交回滚";
+    } finally {
+      state.busy = false;
+      setActionButtonsDisabled(false);
+    }
+  }
+
+  function validateRefundRollbackForm(form) {
+    const data = Object.fromEntries(new FormData(form).entries());
+    const orderId = normalizeId(data.orderId);
+    const reason = String(data.reason || "").trim();
+    if (!/^\d+$/.test(orderId)) {
+      return { valid: false, message: "订单号必须为数字" };
+    }
+    if (!reason) {
+      return { valid: false, message: "请输入回滚原因" };
+    }
+    if (reason.length > 255) {
+      return { valid: false, message: "回滚原因不能超过 255 个字符" };
+    }
+    return { valid: true, orderId, reason };
+  }
+
+  function showFormError(node, message) {
+    if (!node) {
+      return;
+    }
+    node.textContent = message || "";
+    node.hidden = !message;
+  }
+
+  async function requestOrderRefundRollback(orderId, reason) {
+    return apiPost("/api/order/refund/rollback", {
+      orderId: normalizeId(orderId),
+      reason
+    });
+  }
+
+  function syncOrderAfterRefundRollback(order, fallbackOrderId) {
+    const resolvedOrderId = resolveOrderId(order, fallbackOrderId);
+    const { path } = parseHash();
+    if (path.startsWith("/checkout/") && normalizeId(path.split("/")[2]) === resolvedOrderId) {
+      app.innerHTML = checkoutTemplate(order, readContext(resolvedOrderId), state.checkoutPay[resolvedOrderId], resolvedOrderId);
+      bindCheckout(order, resolvedOrderId);
+      return;
+    }
+    if (path.startsWith("/tickets/") && normalizeId(path.split("/")[2]) === resolvedOrderId) {
+      renderTickets(resolvedOrderId);
+      return;
+    }
+    if (path === "/orders") {
+      renderOrders();
+    }
   }
 
   async function apiGet(path, options) {
@@ -1094,7 +1330,7 @@
         <p>${escapeHtml(apiMessage(error))}</p>
         <div class="button-row">
           <button class="btn primary" type="button" id="retry">重试</button>
-          <a class="btn" href="#/">返回场次</a>
+          <a class="btn" href="#/">返回项目</a>
         </div>
       </section>
     `;
@@ -1102,7 +1338,7 @@
   }
 
   function renderNotFound() {
-    app.innerHTML = emptyState("页面不存在", "请从场次列表或订单列表继续。");
+    app.innerHTML = emptyState("页面不存在", "请从项目列表或订单列表继续。");
   }
 
   function emptyState(title, text) {
@@ -1161,7 +1397,7 @@
       DRAMA: "戏剧",
       MOVIE: "电影"
     };
-    return map[type] || type || "场次";
+    return map[type] || type || "项目";
   }
 
   function statusText(status) {
@@ -1171,6 +1407,8 @@
       SOLD: "已售",
       PENDING_PAYMENT: "待支付",
       PAID: "已支付",
+      REFUNDING: "退款中",
+      REFUNDED: "已退款",
       CANCELED: "已取消",
       CLOSED: "已关闭",
       WAITING: "待支付",
@@ -1179,9 +1417,64 @@
     return map[status] || status || "-";
   }
 
+  function ticketUnavailableState(status) {
+    const map = {
+      REFUNDING: {
+        title: "退票处理中",
+        description: "退款处理完成后电子票会失效，座位释放结果以订单状态为准。"
+      },
+      REFUNDED: {
+        title: "已退票",
+        description: "退款已处理，电子票已失效。"
+      },
+      CANCELED: {
+        title: "订单已取消",
+        description: "该订单未完成支付，未生成电子票。"
+      },
+      CLOSED: {
+        title: "订单已关闭",
+        description: "该订单已关闭，未生成可用电子票。"
+      }
+    };
+    return map[status] || {
+      title: "尚未出票",
+      description: "订单支付成功后会生成电子票。"
+    };
+  }
+
   function statusPill(status) {
-    const cls = status === "PAID" || status === "SUCCESS" ? "ok" : status === "PENDING_PAYMENT" || status === "WAITING" ? "warn" : "danger";
+    const cls = status === "PAID" || status === "SUCCESS" ? "ok" : status === "PENDING_PAYMENT" || status === "WAITING" || status === "REFUNDING" ? "warn" : "danger";
     return `<span class="pill ${cls}">${escapeHtml(statusText(status))}</span>`;
+  }
+
+  function formatVenueAddress(venue) {
+    if (!venue) {
+      return "";
+    }
+    if (venue.address) {
+      return venue.address;
+    }
+    const parts = [];
+    [
+      venue.province,
+      venue.city,
+      venue.district,
+      venue.town,
+      venue.village,
+      venue.street,
+      venue.houseNumber,
+      venue.estate,
+      venue.building
+    ].forEach((value) => appendAddressPart(parts, value));
+    return parts.join("");
+  }
+
+  function appendAddressPart(parts, value) {
+    const text = String(value || "").trim();
+    if (!text || parts[parts.length - 1] === text) {
+      return;
+    }
+    parts.push(text);
   }
 
   function formatDateTime(value) {

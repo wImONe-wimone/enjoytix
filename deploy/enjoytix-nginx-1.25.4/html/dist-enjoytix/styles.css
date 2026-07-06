@@ -119,10 +119,6 @@ button:disabled {
   align-items: center;
 }
 
-.token-input {
-  width: min(220px, 26vw);
-}
-
 .page {
   width: min(1180px, calc(100vw - 32px));
   margin: 0 auto;
@@ -159,7 +155,7 @@ button:disabled {
 
 .toolbar {
   display: grid;
-  grid-template-columns: 1.2fr 0.8fr 0.8fr 0.8fr auto;
+  grid-template-columns: 1.2fr 0.8fr 0.8fr auto;
   gap: 10px;
   padding: 12px;
   border: 1px solid var(--line);
@@ -180,6 +176,7 @@ button:disabled {
 
 .field input,
 .field select,
+.field textarea,
 .input {
   width: 100%;
   min-height: 40px;
@@ -193,9 +190,25 @@ button:disabled {
 
 .field input:focus,
 .field select:focus,
+.field textarea:focus,
 .input:focus {
   border-color: var(--brand);
   box-shadow: 0 0 0 3px rgba(36, 87, 167, 0.14);
+}
+
+.field textarea {
+  min-height: 104px;
+  resize: vertical;
+}
+
+.form-error {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(180, 35, 24, 0.28);
+  border-radius: 8px;
+  background: rgba(180, 35, 24, 0.08);
+  color: var(--danger);
+  font-size: 14px;
 }
 
 .button-row {
@@ -764,6 +777,112 @@ button:disabled {
   gap: 12px;
 }
 
+.form-grid.two-col {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.two-col-span {
+  grid-column: 1 / -1;
+}
+
+.account-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.account-tabs {
+  display: grid;
+  gap: 8px;
+}
+
+.account-tabs a {
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.account-tabs a.active,
+.account-tabs a:hover {
+  border-color: var(--brand);
+  color: var(--brand-strong);
+  box-shadow: 0 0 0 3px rgba(36, 87, 167, 0.1);
+}
+
+.account-content {
+  min-width: 0;
+}
+
+.account-section {
+  display: grid;
+  gap: 16px;
+}
+
+.management-list {
+  display: grid;
+  border-top: 1px solid var(--line);
+}
+
+.management-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.management-card h3,
+.management-card p {
+  margin: 0;
+}
+
+.management-top {
+  display: flex;
+  gap: 12px;
+  align-items: start;
+  justify-content: space-between;
+}
+
+.inline-empty {
+  display: grid;
+  gap: 6px;
+  padding: 18px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  background: #fbfcfe;
+}
+
+.inline-empty h3,
+.inline-empty p {
+  margin: 0;
+}
+
+.inline-empty p {
+  color: var(--muted);
+}
+
+.check-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 40px;
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.check-row input {
+  width: 18px;
+  height: 18px;
+}
+
+.dialog.wide {
+  width: min(680px, 100%);
+}
+
 #toast-root {
   position: fixed;
   right: 16px;
@@ -813,17 +932,20 @@ button:disabled {
   .toolbar,
   .detail-layout,
   .checkout-layout,
-  .detail-intro {
+  .detail-intro,
+  .account-layout {
     grid-template-columns: 1fr;
+  }
+
+  .account-tabs {
+    display: flex;
+    flex-wrap: wrap;
   }
 
   .summary-panel {
     position: static;
   }
 
-  .token-input {
-    width: 100%;
-  }
 }
 
 @media (max-width: 560px) {
@@ -838,13 +960,14 @@ button:disabled {
     width: 100%;
   }
 
-  .auth-inline .token-input {
-    grid-column: 1 / -1;
+  .form-grid.two-col {
+    grid-template-columns: 1fr;
   }
 
   .section-title,
   .order-top,
-  .ticket-top {
+  .ticket-top,
+  .management-top {
     display: grid;
     align-items: start;
   }

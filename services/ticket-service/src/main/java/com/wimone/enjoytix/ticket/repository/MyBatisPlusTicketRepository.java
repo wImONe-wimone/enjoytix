@@ -134,4 +134,11 @@ public class MyBatisPlusTicketRepository implements TicketRepository {
         }
         ticketIssueMapper.updateById(issueDO);
     }
+
+    @Override
+    public List<TicketIssueDO> listIssuesByLockId(Long lockId) {
+        return ticketIssueMapper.selectList(Wrappers.lambdaQuery(TicketIssueDO.class)
+                .eq(TicketIssueDO::getLockId, lockId)
+                .orderByAsc(TicketIssueDO::getId));
+    }
 }

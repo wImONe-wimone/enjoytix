@@ -7,6 +7,7 @@ import com.wimone.enjoytix.order.remote.dto.TicketIssueRespDTO;
 import com.wimone.enjoytix.order.remote.dto.TicketLockReqDTO;
 import com.wimone.enjoytix.order.remote.dto.TicketLockRespDTO;
 import com.wimone.enjoytix.order.remote.dto.TicketReleaseReqDTO;
+import com.wimone.enjoytix.order.remote.dto.TicketRefundReqDTO;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -30,4 +31,7 @@ public interface TicketRemoteService {
 
     @PostMapping("/api/ticket/issue")
     Result<TicketIssueRespDTO> issue(@RequestHeader("X-User-Id") Long userId, @RequestBody TicketIssueReqDTO requestParam);
+
+    @PostMapping("/api/ticket/refund")
+    Result<Boolean> refund(@RequestHeader("X-User-Id") Long userId, @RequestBody TicketRefundReqDTO requestParam);
 }

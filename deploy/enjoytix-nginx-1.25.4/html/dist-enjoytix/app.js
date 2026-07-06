@@ -3,6 +3,8 @@
   const STORAGE_TOKEN = "enjoytix.token";
   const STORAGE_USER = "enjoytix.user";
   const STORAGE_CONTEXT = "enjoytix.checkoutContext";
+  const USER_ID_HEADER = "X-User-Id";
+  const AUTHORIZATION_PREFIX = "Bearer ";
   const MAX_QUANTITY = 6;
   const API_BASE = normalizeBaseUrl(window.ENJOYTIX_API_BASE || "");
 
@@ -12,8 +14,8 @@
   const toastRoot = document.querySelector("#toast-root");
 
   const state = {
-    token: localStorage.getItem(STORAGE_TOKEN) || "dev-1",
-    user: readJson(STORAGE_USER),
+    token: "",
+    user: null,
     catalogQuery: {},
     currentDetail: null,
     detailSelection: {},
@@ -21,17 +23,17 @@
     busy: false
   };
 
-  if (!localStorage.getItem(STORAGE_TOKEN)) {
-    localStorage.setItem(STORAGE_TOKEN, state.token);
-  }
+  localStorage.removeItem(STORAGE_TOKEN);
+  localStorage.removeItem(STORAGE_USER);
 
   window.addEventListener("hashchange", route);
   document.addEventListener("click", handleGlobalClick);
-  document.addEventListener("submit", handleGlobalSubmit);
 
   renderAuth();
   route();
-  refreshUser();
+  if (state.token) {
+    refreshUser();
+  }
 
   function handleGlobalClick(event) {
     const action = event.target.closest("[data-action]");
@@ -51,15 +53,11 @@
     if (name === "logout") {
       logout();
     }
-  }
-
-  function handleGlobalSubmit(event) {
-    if (event.target.id === "token-form") {
-      event.preventDefault();
-      const token = new FormData(event.target).get("token").toString().trim();
-      setToken(token || "dev-1", null);
-      toast("已应用访问令牌", "success");
-      route();
+    if (name === "open-refund-rollback") {
+      openRefundRollbackDialog(action.dataset.orderId);
+    }
+    if (name === "open-order-refund") {
+      openOrderRefundDialog(action.dataset.orderId);
     }
   }
 
@@ -88,24 +86,26 @@
       renderOrders();
       return;
     }
+    if (path === "/account" || path.startsWith("/account/")) {
+      renderAccount(path.split("/")[2] || query.tab || "profile");
+      return;
+    }
     renderNotFound();
   }
 
   async function renderCatalog(query) {
     state.catalogQuery = {
       keyword: query.keyword || "",
-      city: query.city || "",
       performanceType: query.performanceType || "",
       showDate: query.showDate || "",
       current: Number(query.current || 1),
       size: 12
     };
-    renderLoading("正在加载场次");
+    renderLoading("正在加载文娱票务项目");
     try {
       const params = new URLSearchParams();
       params.set("current", state.catalogQuery.current);
       params.set("size", state.catalogQuery.size);
-      if (state.catalogQuery.city) params.set("city", state.catalogQuery.city);
       if (state.catalogQuery.performanceType) params.set("performanceType", state.catalogQuery.performanceType);
       if (state.catalogQuery.keyword) params.set("artistName", state.catalogQuery.keyword);
       if (state.catalogQuery.showDate) params.set("showDate", state.catalogQuery.showDate);
@@ -113,7 +113,7 @@
       app.innerHTML = catalogTemplate(page, state.catalogQuery);
       bindCatalog(page);
     } catch (error) {
-      renderError("场次加载失败", error, () => renderCatalog(query));
+      renderError("项目列表加载失败", error, () => renderCatalog(query));
     }
   }
 
@@ -125,7 +125,7 @@
       <section class="band">
         <div class="section-title">
           <div>
-            <h1>演出与电影场次</h1>
+            <h1>文娱票务项目</h1>
             <p>共 ${total} 个可购项目</p>
           </div>
           <div class="button-row">
@@ -136,10 +136,6 @@
           <div class="field">
             <label for="keyword">艺人/团队</label>
             <input id="keyword" name="keyword" value="${escapeAttr(query.keyword)}" placeholder="Aurora / Theatre">
-          </div>
-          <div class="field">
-            <label for="city">城市</label>
-            <input id="city" name="city" value="${escapeAttr(query.city)}" placeholder="Shanghai">
           </div>
           <div class="field">
             <label for="performanceType">类型</label>
@@ -168,12 +164,14 @@
             <span class="muted">第 ${query.current} / ${maxPage} 页</span>
             <button class="btn" data-page="${query.current + 1}" ${query.current >= maxPage ? "disabled" : ""}>下一页</button>
           </div>
-        ` : emptyState("没有匹配场次", "换一个城市、日期或类型再试。")}
+        ` : emptyState("没有匹配项目", "换一个日期、类型或艺人/团队再试。")}
       </section>
     `;
   }
 
   function performanceCard(item) {
+    const venue = item.venue || {};
+    const venueAddress = formatVenueAddress(venue) || "-";
     return `
       <article class="performance-card">
         <a class="poster" href="#/performance/${item.performanceId}" aria-label="${escapeAttr(item.title)}">
@@ -183,11 +181,12 @@
         <div class="performance-body">
           <h3><a href="#/performance/${item.performanceId}">${escapeHtml(item.title)}</a></h3>
           <ul class="meta-list">
-            <li><strong>${escapeHtml(item.city || "-")}</strong> · ${escapeHtml(item.venue?.name || "-")}</li>
+            <li><strong>${escapeHtml(venue.name || "-")}</strong></li>
+            <li>${escapeHtml(venueAddress)}</li>
             <li>${escapeHtml(item.artist?.name || "-")}</li>
             <li>${formatDateTime(item.earliestShowTime)}</li>
           </ul>
-          <a class="btn primary" href="#/performance/${item.performanceId}">选择场次</a>
+          <a class="btn primary" href="#/performance/${item.performanceId}">选购门票</a>
         </div>
       </article>
     `;
@@ -199,7 +198,7 @@
       event.preventDefault();
       const data = Object.fromEntries(new FormData(form).entries());
       const params = new URLSearchParams();
-      for (const key of ["keyword", "city", "performanceType", "showDate"]) {
+      for (const key of ["keyword", "performanceType", "showDate"]) {
         if (data[key]) params.set(key, data[key]);
       }
       window.location.hash = `#/${params.toString() ? `?${params.toString()}` : ""}`;
@@ -209,7 +208,7 @@
         const targetPage = Number(button.dataset.page);
         if (!targetPage || targetPage < 1) return;
         const params = new URLSearchParams();
-        for (const key of ["keyword", "city", "performanceType", "showDate"]) {
+        for (const key of ["keyword", "performanceType", "showDate"]) {
           if (state.catalogQuery[key]) params.set(key, state.catalogQuery[key]);
         }
         params.set("current", targetPage);
@@ -219,12 +218,12 @@
   }
 
   async function renderPerformanceDetail(performanceId, query) {
-    renderLoading("正在加载场次详情");
+    renderLoading("正在加载项目详情");
     try {
       const detail = await apiGet(`/api/performance/${encodeURIComponent(performanceId)}`);
       const showId = Number(query.showId || detail.sessions?.[0]?.showId || 0);
       if (!showId) {
-        app.innerHTML = emptyState("暂无可售场次", "该项目还没有开放场次。");
+        app.innerHTML = emptyState("暂无可售时间", "该项目还没有开放售票时间。");
         return;
       }
       const [availability, seatMap, seats] = await Promise.all([
@@ -236,7 +235,7 @@
       ensureSelection(showId, availability);
       renderDetailFromState();
     } catch (error) {
-      renderError("场次详情加载失败", error, () => renderPerformanceDetail(performanceId, query));
+      renderError("项目详情加载失败", error, () => renderPerformanceDetail(performanceId, query));
     }
   }
 
@@ -248,6 +247,7 @@
     const show = detail.sessions.find((item) => Number(item.showId) === Number(showId)) || detail.sessions[0];
     const category = availability.find((item) => Number(item.categoryId) === Number(selection.categoryId));
     const selectedSeats = selectedSeatDetails(seats, selection.selectedSeats);
+    const venueAddress = formatVenueAddress(detail.venue) || "-";
     app.innerHTML = `
       <section class="detail-layout">
         <div class="detail-main">
@@ -257,19 +257,19 @@
             </div>
             <div class="detail-copy">
               <div class="button-row">
-                <a class="btn ghost compact" href="#/">返回场次</a>
+                <a class="btn ghost compact" href="#/">返回项目</a>
                 <span class="pill ok">${typeText(detail.performanceType)}</span>
               </div>
               <h1>${escapeHtml(detail.title)}</h1>
               <p>${escapeHtml(detail.description || "")}</p>
               <ul class="meta-list">
-                <li><strong>${escapeHtml(detail.venue?.name || "-")}</strong> · ${escapeHtml(detail.venue?.address || detail.city || "-")}</li>
+                <li><strong>${escapeHtml(detail.venue?.name || "-")}</strong> · ${escapeHtml(venueAddress)}</li>
                 <li>${escapeHtml(detail.artist?.name || "-")}</li>
               </ul>
             </div>
           </div>
           <section class="panel">
-            <h2>选择场次</h2>
+            <h2>选择演出时间</h2>
             <div class="segmented">
               ${(detail.sessions || []).map((item) => `
                 <button type="button" data-show-id="${item.showId}" class="${Number(item.showId) === Number(showId) ? "active" : ""}">
@@ -296,7 +296,7 @@
 
   function categoryPanelTemplate(availability, selectedCategoryId) {
     if (!availability.length) {
-      return emptyState("暂无票档", "该场次当前没有可售票档。");
+      return emptyState("暂无票档", "该演出时间当前没有可售票档。");
     }
     return `
       <h2>选择票档</h2>
@@ -330,7 +330,7 @@
       `;
     }
     if (!seatMap || !Array.isArray(seatMap.seats) || !seatMap.seats.length) {
-      return emptyState("暂无座位图", "该场次还没有座位图数据。");
+      return emptyState("暂无座位图", "该演出时间还没有座位图数据。");
     }
     const seatState = new Map(seats.map((seat) => [String(seat.seatId), seat]));
     const rows = [];
@@ -393,7 +393,7 @@
     return `
       <h2>订单确认</h2>
       <div class="summary-line"><span>项目</span><strong>${escapeHtml(detail.title)}</strong></div>
-      <div class="summary-line"><span>场次</span><strong>${formatDateTime(show?.showTime)}</strong></div>
+      <div class="summary-line"><span>演出时间</span><strong>${formatDateTime(show?.showTime)}</strong></div>
       <div class="summary-line"><span>票档</span><strong>${escapeHtml(category?.categoryName || "-")}</strong></div>
       <div class="summary-line"><span>座位</span><strong>${selectedSeats.length ? selectedSeats.map((seat) => escapeHtml(seat.seatNo)).join("、") : "未选择"}</strong></div>
       <div class="summary-line"><span>数量</span><strong>${quantity}</strong></div>
@@ -495,6 +495,7 @@
 
   async function createOrderFromSelection() {
     if (!state.currentDetail || state.busy) return;
+    if (!requireLogin()) return;
     const data = state.currentDetail;
     const selection = ensureSelection(data.showId, data.availability);
     const category = data.availability.find((item) => Number(item.categoryId) === Number(selection.categoryId));
@@ -541,9 +542,10 @@
 
   async function renderCheckout(orderId) {
     const routeOrderId = normalizeId(orderId);
+    if (!requireLogin()) return;
     renderLoading("正在加载订单");
     try {
-      const order = await apiGet(`/api/order/${encodeURIComponent(routeOrderId)}`);
+      const order = await apiGet(`/api/user/orders/${encodeURIComponent(routeOrderId)}`);
       const resolvedOrderId = resolveOrderId(order, routeOrderId);
       const context = readContext(resolvedOrderId);
       app.innerHTML = checkoutTemplate(order, context, state.checkoutPay[resolvedOrderId], resolvedOrderId);
@@ -564,7 +566,7 @@
           <div class="section-title">
             <div>
               <h1>订单 ${escapeHtml(order.orderSn || order.orderId)}</h1>
-              <p>${context?.performanceTitle ? escapeHtml(context.performanceTitle) : `场次 ${escapeHtml(order.showId)}`}</p>
+              <p>${context?.performanceTitle ? escapeHtml(context.performanceTitle) : `演出时间 #${escapeHtml(order.showId)}`}</p>
             </div>
             ${statusPill(order.status)}
           </div>
@@ -604,7 +606,11 @@
             ${pay ? `<button class="btn primary" type="button" data-pay-success="${escapeAttr(payId)}" ${state.busy ? "disabled" : ""}>模拟支付成功</button>` : ""}
             <button class="btn danger" type="button" data-order-cancel="${escapeAttr(resolvedOrderId)}" ${state.busy ? "disabled" : ""}>取消订单</button>
           ` : ""}
-          ${paid ? `<a class="btn primary" href="${ticketsHash(resolvedOrderId)}">查看电子票</a>` : ""}
+          ${paid ? `
+            <a class="btn primary" href="${ticketsHash(resolvedOrderId)}">查看电子票</a>
+            <button class="btn danger" type="button" data-action="open-order-refund" data-order-id="${escapeAttr(resolvedOrderId)}" ${state.busy ? "disabled" : ""}>申请退票</button>
+          ` : ""}
+          ${order.status === "REFUNDING" ? `<button class="btn danger" type="button" data-action="open-refund-rollback" data-order-id="${escapeAttr(resolvedOrderId)}" ${state.busy ? "disabled" : ""}>退款回滚</button>` : ""}
           ${!pending && !paid ? `<p class="muted">当前状态不可继续支付。</p>` : ""}
         </aside>
       </section>
@@ -628,6 +634,7 @@
   }
 
   async function createPayOrder(orderId) {
+    if (!requireLogin()) return;
     const resolvedOrderId = normalizeId(orderId);
     state.busy = true;
     setActionButtonsDisabled(true);
@@ -644,6 +651,7 @@
   }
 
   async function mockPaySuccess(payId, orderId) {
+    if (!requireLogin()) return;
     const resolvedOrderId = normalizeId(orderId);
     const resolvedPayId = normalizeId(payId);
     state.busy = true;
@@ -661,12 +669,13 @@
   }
 
   async function cancelOrder(orderId) {
+    if (!requireLogin()) return;
     const resolvedOrderId = normalizeId(orderId);
     if (!window.confirm("确认取消该待支付订单？")) {
       return;
     }
     try {
-      await apiPost("/api/order/cancel", { orderId: resolvedOrderId });
+      await apiPost("/api/user/orders/cancel", { orderId: resolvedOrderId });
       toast("订单已取消，座位已释放", "success");
       renderCheckout(resolvedOrderId);
     } catch (error) {
@@ -676,9 +685,10 @@
 
   async function renderTickets(orderId) {
     const routeOrderId = normalizeId(orderId);
+    if (!requireLogin()) return;
     renderLoading("正在加载电子票");
     try {
-      const order = await apiGet(`/api/order/${encodeURIComponent(routeOrderId)}`);
+      const order = await apiGet(`/api/user/orders/${encodeURIComponent(routeOrderId)}`);
       const resolvedOrderId = resolveOrderId(order, routeOrderId);
       const show = await apiGet(`/api/show/${encodeURIComponent(order.showId)}`).catch(() => null);
       const performance = show?.performanceId ? await apiGet(`/api/performance/${encodeURIComponent(show.performanceId)}`).catch(() => null) : null;
@@ -700,6 +710,7 @@
         });
       });
     }
+    const unavailableState = ticketUnavailableState(order.status);
     if (order.status !== "PAID") {
       return `
         <section class="band">
@@ -710,7 +721,7 @@
             </div>
             ${statusPill(order.status)}
           </div>
-          ${emptyState("尚未出票", "订单支付成功后会生成电子票。")}
+          ${emptyState(unavailableState.title, unavailableState.description)}
           <div class="button-row">
             <a class="btn primary" href="${checkoutHash(resolvedOrderId)}">返回订单</a>
             <a class="btn" href="#/orders">订单列表</a>
@@ -723,7 +734,7 @@
         <div class="section-title">
           <div>
             <h1>电子票</h1>
-            <p>${escapeHtml(performance?.title || context?.performanceTitle || `场次 ${order.showId}`)}</p>
+            <p>${escapeHtml(performance?.title || context?.performanceTitle || `演出时间 #${order.showId}`)}</p>
           </div>
           ${statusPill(order.status)}
         </div>
@@ -746,6 +757,7 @@
           `).join("")}
         </div>
         <div class="button-row">
+          <button class="btn danger" type="button" data-action="open-order-refund" data-order-id="${escapeAttr(resolvedOrderId)}" ${state.busy ? "disabled" : ""}>申请退票</button>
           <a class="btn" href="#/orders">订单列表</a>
           <a class="btn" href="#/">继续购票</a>
         </div>
@@ -754,9 +766,10 @@
   }
 
   async function renderOrders() {
+    if (!requireLogin()) return;
     renderLoading("正在加载订单列表");
     try {
-      const orders = await apiGet("/api/order/page");
+      const orders = await apiGet("/api/user/orders");
       app.innerHTML = `
         <section class="band">
           <div class="section-title">
@@ -773,6 +786,7 @@
           ` : emptyState("暂无订单", "完成选座下单后，订单会出现在这里。")}
         </section>
       `;
+      bindOrderList();
     } catch (error) {
       renderError("订单列表加载失败", error, () => renderOrders());
     }
@@ -789,28 +803,501 @@
         </div>
         <ul class="meta-list">
           <li><strong>订单号</strong> ${escapeHtml(order.orderSn || order.orderId)}</li>
-          <li><strong>场次</strong> ${context?.showTime ? formatDateTime(context.showTime) : `#${escapeHtml(order.showId)}`}</li>
+          <li><strong>演出时间</strong> ${context?.showTime ? formatDateTime(context.showTime) : `#${escapeHtml(order.showId)}`}</li>
           <li><strong>金额</strong> ${formatMoney(order.totalAmount)} · <strong>截止</strong> ${formatDateTime(order.payExpireTime)}</li>
         </ul>
         <div class="button-row">
           <a class="btn primary" href="${order.status === "PAID" ? ticketsHash(orderId) : checkoutHash(orderId)}">${order.status === "PAID" ? "电子票" : "查看订单"}</a>
           ${order.status === "PENDING_PAYMENT" ? `<a class="btn" href="${checkoutHash(orderId)}">去支付</a>` : ""}
+          ${order.status === "PENDING_PAYMENT" ? `<button class="btn danger" type="button" data-user-order-cancel="${escapeAttr(orderId)}">取消订单</button>` : ""}
+          ${order.status === "PAID" ? `<button class="btn danger" type="button" data-action="open-order-refund" data-order-id="${escapeAttr(orderId)}" ${state.busy ? "disabled" : ""}>申请退票</button>` : ""}
+          ${order.status === "REFUNDING" ? `<button class="btn danger" type="button" data-action="open-refund-rollback" data-order-id="${escapeAttr(orderId)}" ${state.busy ? "disabled" : ""}>退款回滚</button>` : ""}
         </div>
       </article>
     `;
   }
 
+  function bindOrderList() {
+    document.querySelectorAll("[data-user-order-cancel]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const orderId = normalizeId(button.dataset.userOrderCancel);
+        if (!window.confirm("确认取消该待支付订单？")) {
+          return;
+        }
+        button.disabled = true;
+        try {
+          await apiPost("/api/user/orders/cancel", { orderId });
+          toast("订单已取消", "success");
+          renderOrders();
+        } catch (error) {
+          button.disabled = false;
+          toast(apiMessage(error), "error");
+        }
+      });
+    });
+  }
+
+  async function renderAccount(tab) {
+    if (!requireLogin()) return;
+    const currentTab = ["profile", "addresses", "attendees"].includes(tab) ? tab : "profile";
+    renderLoading("正在加载用户中心");
+    try {
+      if (currentTab === "profile") {
+        const user = await apiGet("/api/user/me");
+        saveUser(user);
+        app.innerHTML = accountShell(currentTab, profileTemplate(user));
+        bindProfileForm();
+        return;
+      }
+      if (currentTab === "addresses") {
+        const addresses = await apiGet("/api/user/addresses");
+        app.innerHTML = accountShell(currentTab, addressesTemplate(Array.isArray(addresses) ? addresses : []));
+        bindAddresses(Array.isArray(addresses) ? addresses : []);
+        return;
+      }
+      const attendees = await apiGet("/api/user/attendees");
+      app.innerHTML = accountShell(currentTab, attendeesTemplate(Array.isArray(attendees) ? attendees : []));
+      bindAttendees(Array.isArray(attendees) ? attendees : []);
+    } catch (error) {
+      renderError("用户中心加载失败", error, () => renderAccount(currentTab));
+    }
+  }
+
+  function accountShell(tab, body) {
+    return `
+      <section class="band">
+        <div class="section-title">
+          <div>
+            <h1>我的账户</h1>
+            <p>${escapeHtml(state.user?.username || `用户 #${currentUserId()}`)}</p>
+          </div>
+          <div class="button-row">
+            <a class="btn" href="#/">继续购票</a>
+            <a class="btn" href="#/orders">我的订单</a>
+          </div>
+        </div>
+        <div class="account-layout">
+          <nav class="account-tabs" aria-label="账户功能">
+            <a href="#/account/profile" class="${tab === "profile" ? "active" : ""}">个人资料</a>
+            <a href="#/account/addresses" class="${tab === "addresses" ? "active" : ""}">收货地址</a>
+            <a href="#/account/attendees" class="${tab === "attendees" ? "active" : ""}">观演人</a>
+          </nav>
+          <div class="account-content">${body}</div>
+        </div>
+      </section>
+    `;
+  }
+
+  function profileTemplate(user) {
+    return `
+      <section class="panel account-section">
+        <div class="section-title">
+          <div>
+            <h2>个人资料</h2>
+            <p>用户名不可在当前接口中修改。</p>
+          </div>
+          <span class="pill ${Number(user.status) === 1 ? "ok" : "danger"}">${userStatusText(user.status)}</span>
+        </div>
+        <form id="profile-form" class="form-grid two-col">
+          <div class="field">
+            <label for="profile-user-id">用户 ID</label>
+            <input id="profile-user-id" value="${escapeAttr(user.userId || "")}" disabled>
+          </div>
+          <div class="field">
+            <label for="profile-username">用户名</label>
+            <input id="profile-username" value="${escapeAttr(user.username || "")}" disabled>
+          </div>
+          <div class="field">
+            <label for="profile-mobile">手机号</label>
+            <input id="profile-mobile" name="mobile" value="${escapeAttr(user.mobile || "")}" required>
+          </div>
+          <div class="field">
+            <label for="profile-real-name">真实姓名</label>
+            <input id="profile-real-name" name="realName" value="${escapeAttr(user.realName || "")}">
+          </div>
+          <div class="button-row two-col-span">
+            <button class="btn primary" type="submit">保存资料</button>
+          </div>
+        </form>
+      </section>
+    `;
+  }
+
+  function bindProfileForm() {
+    const form = document.querySelector("#profile-form");
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = form.querySelector("button[type='submit']");
+      button.disabled = true;
+      try {
+        const user = await apiPut("/api/user/me", {
+          mobile: textField(form, "mobile"),
+          realName: textField(form, "realName")
+        });
+        saveUser(user);
+        toast("资料已更新", "success");
+        renderAccount("profile");
+      } catch (error) {
+        button.disabled = false;
+        toast(apiMessage(error), "error");
+      }
+    });
+  }
+
+  function addressesTemplate(addresses) {
+    return `
+      <section class="panel account-section">
+        <div class="section-title">
+          <div>
+            <h2>收货地址</h2>
+            <p>${addresses.length} 个地址</p>
+          </div>
+          <button class="btn primary" type="button" id="add-address">新增地址</button>
+        </div>
+        ${addresses.length ? `
+          <div class="management-list">
+            ${addresses.map(addressCard).join("")}
+          </div>
+        ` : inlineEmpty("暂无地址", "新增地址后可在订单配送或联系场景中使用。")}
+      </section>
+    `;
+  }
+
+  function addressCard(address) {
+    const addressId = normalizeId(address.addressId);
+    return `
+      <article class="management-card">
+        <div class="management-top">
+          <div>
+            <h3>${escapeHtml(address.receiverName || "-")}</h3>
+            <p>${escapeHtml(address.receiverMobile || "-")}</p>
+          </div>
+          ${Number(address.defaultFlag) === 1 ? `<span class="pill ok">默认</span>` : `<span class="pill">普通</span>`}
+        </div>
+        <p>${escapeHtml([address.province, address.city, address.district, address.detailAddress].filter(Boolean).join(" "))}</p>
+        <p class="muted">邮编 ${escapeHtml(address.postalCode || "-")}</p>
+        <div class="button-row">
+          <button class="btn compact" type="button" data-edit-address="${escapeAttr(addressId)}">编辑</button>
+          ${Number(address.defaultFlag) === 1 ? "" : `<button class="btn compact" type="button" data-default-address="${escapeAttr(addressId)}">设为默认</button>`}
+          <button class="btn danger compact" type="button" data-delete-address="${escapeAttr(addressId)}">删除</button>
+        </div>
+      </article>
+    `;
+  }
+
+  function bindAddresses(addresses) {
+    const byId = new Map(addresses.map((item) => [normalizeId(item.addressId), item]));
+    document.querySelector("#add-address").addEventListener("click", () => openAddressDialog());
+    document.querySelectorAll("[data-edit-address]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const addressId = normalizeId(button.dataset.editAddress);
+        button.disabled = true;
+        try {
+          const address = await apiGet(`/api/user/addresses/${encodeURIComponent(addressId)}`);
+          openAddressDialog(address || byId.get(addressId));
+        } catch (error) {
+          toast(apiMessage(error), "error");
+        } finally {
+          button.disabled = false;
+        }
+      });
+    });
+    document.querySelectorAll("[data-default-address]").forEach((button) => {
+      button.addEventListener("click", () => setDefaultAddress(button));
+    });
+    document.querySelectorAll("[data-delete-address]").forEach((button) => {
+      button.addEventListener("click", () => deleteAddress(button));
+    });
+  }
+
+  async function setDefaultAddress(button) {
+    button.disabled = true;
+    try {
+      await apiPut(`/api/user/addresses/${encodeURIComponent(normalizeId(button.dataset.defaultAddress))}/default`);
+      toast("默认地址已更新", "success");
+      renderAccount("addresses");
+    } catch (error) {
+      button.disabled = false;
+      toast(apiMessage(error), "error");
+    }
+  }
+
+  async function deleteAddress(button) {
+    if (!window.confirm("确认删除该地址？")) {
+      return;
+    }
+    button.disabled = true;
+    try {
+      await apiDelete(`/api/user/addresses/${encodeURIComponent(normalizeId(button.dataset.deleteAddress))}`);
+      toast("地址已删除", "success");
+      renderAccount("addresses");
+    } catch (error) {
+      button.disabled = false;
+      toast(apiMessage(error), "error");
+    }
+  }
+
+  function openAddressDialog(address) {
+    const editing = Boolean(address);
+    dialogRoot.innerHTML = `
+      <div class="dialog-backdrop">
+        <section class="dialog wide" role="dialog" aria-modal="true" aria-labelledby="address-title">
+          <div class="dialog-head">
+            <h2 id="address-title">${editing ? "编辑地址" : "新增地址"}</h2>
+            <button class="btn compact" type="button" data-action="close-dialog">关闭</button>
+          </div>
+          <div class="dialog-body">
+            <form id="address-form" class="form-grid two-col">
+              <div class="field">
+                <label for="address-receiver-name">收件人</label>
+                <input id="address-receiver-name" name="receiverName" value="${escapeAttr(address?.receiverName || "")}" maxlength="64" required>
+              </div>
+              <div class="field">
+                <label for="address-receiver-mobile">手机号</label>
+                <input id="address-receiver-mobile" name="receiverMobile" value="${escapeAttr(address?.receiverMobile || "")}" maxlength="32" required>
+              </div>
+              <div class="field">
+                <label for="address-province">省份</label>
+                <input id="address-province" name="province" value="${escapeAttr(address?.province || "")}" maxlength="64" required>
+              </div>
+              <div class="field">
+                <label for="address-city">城市</label>
+                <input id="address-city" name="city" value="${escapeAttr(address?.city || "")}" maxlength="64" required>
+              </div>
+              <div class="field">
+                <label for="address-district">区县</label>
+                <input id="address-district" name="district" value="${escapeAttr(address?.district || "")}" maxlength="64">
+              </div>
+              <div class="field">
+                <label for="address-postal-code">邮编</label>
+                <input id="address-postal-code" name="postalCode" value="${escapeAttr(address?.postalCode || "")}" maxlength="16">
+              </div>
+              <div class="field two-col-span">
+                <label for="address-detail">详细地址</label>
+                <input id="address-detail" name="detailAddress" value="${escapeAttr(address?.detailAddress || "")}" maxlength="255" required>
+              </div>
+              <label class="check-row two-col-span">
+                <input type="checkbox" name="defaultFlag" ${Number(address?.defaultFlag) === 1 ? "checked" : ""}>
+                设为默认地址
+              </label>
+              <div class="button-row two-col-span">
+                <button class="btn primary" type="submit">${editing ? "保存地址" : "创建地址"}</button>
+              </div>
+            </form>
+          </div>
+        </section>
+      </div>
+    `;
+    const form = dialogRoot.querySelector("#address-form");
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = form.querySelector("button[type='submit']");
+      button.disabled = true;
+      try {
+        const payload = {
+          receiverName: textField(form, "receiverName"),
+          receiverMobile: textField(form, "receiverMobile"),
+          province: textField(form, "province"),
+          city: textField(form, "city"),
+          district: textField(form, "district"),
+          detailAddress: textField(form, "detailAddress"),
+          postalCode: textField(form, "postalCode"),
+          defaultFlag: form.elements.defaultFlag.checked ? 1 : 0
+        };
+        if (editing) {
+          payload.addressId = normalizeId(address.addressId);
+          await apiPut("/api/user/addresses", payload);
+        } else {
+          await apiPost("/api/user/addresses", payload);
+        }
+        closeDialog();
+        toast(editing ? "地址已更新" : "地址已创建", "success");
+        renderAccount("addresses");
+      } catch (error) {
+        button.disabled = false;
+        toast(apiMessage(error), "error");
+      }
+    });
+    dialogRoot.querySelector("input").focus();
+  }
+
+  function attendeesTemplate(attendees) {
+    return `
+      <section class="panel account-section">
+        <div class="section-title">
+          <div>
+            <h2>观演人</h2>
+            <p>${attendees.length} 个实名观演人</p>
+          </div>
+          <button class="btn primary" type="button" id="add-attendee">新增观演人</button>
+        </div>
+        ${attendees.length ? `
+          <div class="management-list">
+            ${attendees.map(attendeeCard).join("")}
+          </div>
+        ` : inlineEmpty("暂无观演人", "实名制项目下单前可先维护常用观演人。")}
+      </section>
+    `;
+  }
+
+  function attendeeCard(attendee) {
+    const attendeeId = normalizeId(attendee.attendeeId);
+    return `
+      <article class="management-card">
+        <div class="management-top">
+          <div>
+            <h3>${escapeHtml(attendee.realName || "-")}</h3>
+            <p>${escapeHtml(attendee.mobile || "-")}</p>
+          </div>
+          ${Number(attendee.defaultFlag) === 1 ? `<span class="pill ok">默认</span>` : `<span class="pill">普通</span>`}
+        </div>
+        <p>${certificateTypeText(attendee.certificateType)} · ${escapeHtml(attendee.certificateNo || "-")}</p>
+        <p class="muted">状态 ${userStatusText(attendee.status)}</p>
+        <div class="button-row">
+          <button class="btn compact" type="button" data-edit-attendee="${escapeAttr(attendeeId)}">编辑</button>
+          ${Number(attendee.defaultFlag) === 1 ? "" : `<button class="btn compact" type="button" data-default-attendee="${escapeAttr(attendeeId)}">设为默认</button>`}
+          <button class="btn danger compact" type="button" data-delete-attendee="${escapeAttr(attendeeId)}">删除</button>
+        </div>
+      </article>
+    `;
+  }
+
+  function bindAttendees(attendees) {
+    const byId = new Map(attendees.map((item) => [normalizeId(item.attendeeId), item]));
+    document.querySelector("#add-attendee").addEventListener("click", () => openAttendeeDialog());
+    document.querySelectorAll("[data-edit-attendee]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const attendeeId = normalizeId(button.dataset.editAttendee);
+        button.disabled = true;
+        try {
+          const attendee = await apiGet(`/api/user/attendees/${encodeURIComponent(attendeeId)}`);
+          openAttendeeDialog(attendee || byId.get(attendeeId));
+        } catch (error) {
+          toast(apiMessage(error), "error");
+        } finally {
+          button.disabled = false;
+        }
+      });
+    });
+    document.querySelectorAll("[data-default-attendee]").forEach((button) => {
+      button.addEventListener("click", () => setDefaultAttendee(button));
+    });
+    document.querySelectorAll("[data-delete-attendee]").forEach((button) => {
+      button.addEventListener("click", () => deleteAttendee(button));
+    });
+  }
+
+  async function setDefaultAttendee(button) {
+    button.disabled = true;
+    try {
+      await apiPut(`/api/user/attendees/${encodeURIComponent(normalizeId(button.dataset.defaultAttendee))}/default`);
+      toast("默认观演人已更新", "success");
+      renderAccount("attendees");
+    } catch (error) {
+      button.disabled = false;
+      toast(apiMessage(error), "error");
+    }
+  }
+
+  async function deleteAttendee(button) {
+    if (!window.confirm("确认删除该观演人？")) {
+      return;
+    }
+    button.disabled = true;
+    try {
+      await apiDelete(`/api/user/attendees/${encodeURIComponent(normalizeId(button.dataset.deleteAttendee))}`);
+      toast("观演人已删除", "success");
+      renderAccount("attendees");
+    } catch (error) {
+      button.disabled = false;
+      toast(apiMessage(error), "error");
+    }
+  }
+
+  function openAttendeeDialog(attendee) {
+    const editing = Boolean(attendee);
+    dialogRoot.innerHTML = `
+      <div class="dialog-backdrop">
+        <section class="dialog wide" role="dialog" aria-modal="true" aria-labelledby="attendee-title">
+          <div class="dialog-head">
+            <h2 id="attendee-title">${editing ? "编辑观演人" : "新增观演人"}</h2>
+            <button class="btn compact" type="button" data-action="close-dialog">关闭</button>
+          </div>
+          <div class="dialog-body">
+            <form id="attendee-form" class="form-grid two-col">
+              <div class="field">
+                <label for="attendee-real-name">真实姓名</label>
+                <input id="attendee-real-name" name="realName" value="${escapeAttr(attendee?.realName || "")}" required>
+              </div>
+              <div class="field">
+                <label for="attendee-mobile">手机号</label>
+                <input id="attendee-mobile" name="mobile" value="${escapeAttr(attendee?.mobile || "")}" required>
+              </div>
+              <div class="field">
+                <label for="attendee-certificate-type">证件类型</label>
+                <select id="attendee-certificate-type" name="certificateType" required>
+                  ${option("ID_CARD", "身份证", attendee?.certificateType || "ID_CARD")}
+                  ${option("PASSPORT", "护照", attendee?.certificateType || "ID_CARD")}
+                </select>
+              </div>
+              <div class="field">
+                <label for="attendee-certificate-no">证件号码</label>
+                <input id="attendee-certificate-no" name="certificateNo" value="${escapeAttr(attendee?.certificateNo || "")}" required>
+              </div>
+              <label class="check-row two-col-span">
+                <input type="checkbox" name="defaultFlag" ${Number(attendee?.defaultFlag) === 1 ? "checked" : ""}>
+                设为默认观演人
+              </label>
+              <div class="button-row two-col-span">
+                <button class="btn primary" type="submit">${editing ? "保存观演人" : "创建观演人"}</button>
+              </div>
+            </form>
+          </div>
+        </section>
+      </div>
+    `;
+    const form = dialogRoot.querySelector("#attendee-form");
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = form.querySelector("button[type='submit']");
+      button.disabled = true;
+      try {
+        const payload = {
+          realName: textField(form, "realName"),
+          certificateType: textField(form, "certificateType"),
+          certificateNo: textField(form, "certificateNo"),
+          mobile: textField(form, "mobile"),
+          defaultFlag: form.elements.defaultFlag.checked ? 1 : 0
+        };
+        if (editing) {
+          payload.attendeeId = normalizeId(attendee.attendeeId);
+          await apiPut("/api/user/attendees", payload);
+        } else {
+          await apiPost("/api/user/attendees", payload);
+        }
+        closeDialog();
+        toast(editing ? "观演人已更新" : "观演人已创建", "success");
+        renderAccount("attendees");
+      } catch (error) {
+        button.disabled = false;
+        toast(apiMessage(error), "error");
+      }
+    });
+    dialogRoot.querySelector("input").focus();
+  }
+
   function renderAuth() {
-    const parsedUserId = parseDevUserId(state.token);
+    const userId = currentUserId();
+    const label = state.user?.username || (userId ? `用户 #${userId}` : "未登录");
     authRoot.innerHTML = `
       <div class="auth-inline">
-        <form id="token-form" class="auth-inline">
-          <input class="input token-input" name="token" value="${escapeAttr(state.token || "")}" aria-label="访问令牌">
-          <button class="btn compact" type="submit">应用</button>
-        </form>
-        <button class="btn compact" type="button" data-action="open-login">登录</button>
-        <button class="btn compact" type="button" data-action="open-register">注册</button>
-        <button class="btn ghost compact" type="button" data-action="logout">${state.user?.username ? escapeHtml(state.user.username) : `用户 #${parsedUserId || "-"}`}</button>
+        ${state.token ? `
+          <a class="btn compact" href="#/account">${escapeHtml(label)}</a>
+          <button class="btn ghost compact" type="button" data-action="logout">退出</button>
+        ` : `
+          <button class="btn compact" type="button" data-action="open-login">登录</button>
+          <button class="btn compact" type="button" data-action="open-register">注册</button>
+        `}
       </div>
     `;
   }
@@ -843,10 +1330,6 @@
                   <label for="auth-real-name">姓名</label>
                   <input id="auth-real-name" name="realName">
                 </div>
-                <div class="field">
-                  <label for="auth-id-card">证件号</label>
-                  <input id="auth-id-card" name="idCard">
-                </div>
               `}
               <button class="btn primary" type="submit">${login ? "登录" : "注册并使用"}</button>
             </form>
@@ -864,7 +1347,7 @@
     const payload = Object.fromEntries(new FormData(event.target).entries());
     try {
       const result = await apiPost("/api/user/login", payload, { auth: false });
-      setToken(result.accessToken, result.user);
+      setAuth(result.accessToken, result.user);
       closeDialog();
       toast("登录成功", "success");
       route();
@@ -878,7 +1361,7 @@
     const payload = Object.fromEntries(new FormData(event.target).entries());
     try {
       const user = await apiPost("/api/user/register", payload, { auth: false });
-      setToken(`dev-${user.userId}`, user);
+      setAuth(`dev-${user.userId}`, user);
       closeDialog();
       toast("注册成功", "success");
       route();
@@ -888,34 +1371,48 @@
   }
 
   async function refreshUser() {
+    if (!state.token) {
+      saveUser(null);
+      renderAuth();
+      return;
+    }
     try {
       const user = await apiGet("/api/user/me");
-      state.user = user;
-      localStorage.setItem(STORAGE_USER, JSON.stringify(user));
+      saveUser(user);
       renderAuth();
     } catch (_error) {
-      state.user = null;
-      localStorage.removeItem(STORAGE_USER);
+      saveUser(null);
       renderAuth();
     }
   }
 
-  function setToken(token, user) {
-    state.token = token;
-    state.user = user;
-    localStorage.setItem(STORAGE_TOKEN, token);
-    if (user) {
-      localStorage.setItem(STORAGE_USER, JSON.stringify(user));
-    } else {
-      localStorage.removeItem(STORAGE_USER);
+  function setAuth(token, user, options) {
+    state.token = token || "";
+    state.user = user || null;
+    localStorage.removeItem(STORAGE_TOKEN);
+    localStorage.removeItem(STORAGE_USER);
+    if (!user && options?.refresh) {
       refreshUser();
     }
     renderAuth();
   }
 
-  function logout() {
-    setToken("dev-1", null);
-    toast("已切换到 dev-1", "success");
+  async function logout() {
+    const hadToken = Boolean(state.token);
+    try {
+      if (hadToken) {
+        await apiPost("/api/user/logout");
+      }
+    } catch (error) {
+      toast(apiMessage(error), "error");
+    } finally {
+      setAuth("", null);
+      toast("已退出登录", "success");
+      const { path } = parseHash();
+      if (isProtectedRoute(path)) {
+        window.location.hash = "#/";
+      }
+    }
   }
 
   function closeDialog() {
@@ -923,9 +1420,238 @@
   }
 
   function setActionButtonsDisabled(disabled) {
-    document.querySelectorAll("[data-create-order], [data-pay-create], [data-pay-success], [data-order-cancel]").forEach((button) => {
+    document.querySelectorAll("[data-create-order], [data-pay-create], [data-pay-success], [data-order-cancel], [data-user-order-cancel], [data-action='open-order-refund'], [data-action='open-refund-rollback']").forEach((button) => {
       button.disabled = disabled;
     });
+  }
+
+  function openOrderRefundDialog(orderId) {
+    if (!requireLogin()) return;
+    const resolvedOrderId = normalizeId(orderId);
+    if (!/^\d+$/.test(resolvedOrderId)) {
+      toast("订单号无效，无法申请退票", "error");
+      return;
+    }
+    dialogRoot.innerHTML = `
+      <div class="dialog-backdrop">
+        <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="order-refund-title">
+          <div class="dialog-head">
+            <h2 id="order-refund-title">申请退票</h2>
+            <button class="btn compact" type="button" data-action="close-dialog">关闭</button>
+          </div>
+          <div class="dialog-body">
+            <form id="order-refund-form" class="form-grid">
+              <div class="field">
+                <label for="order-refund-order-id">订单号</label>
+                <input id="order-refund-order-id" name="orderId" value="${escapeAttr(resolvedOrderId)}" readonly required>
+              </div>
+              <div class="field">
+                <label for="order-refund-reason">退票原因（选填）</label>
+                <textarea id="order-refund-reason" name="reason" rows="4" maxlength="255" placeholder="如行程变更、无法按时观演等"></textarea>
+              </div>
+              <p class="form-error" data-order-refund-error hidden></p>
+              <div class="button-row">
+                <button class="btn danger" type="submit" data-order-refund-submit>提交退票申请</button>
+                <button class="btn" type="button" data-action="close-dialog">取消</button>
+              </div>
+            </form>
+          </div>
+        </section>
+      </div>
+    `;
+    const form = dialogRoot.querySelector("#order-refund-form");
+    form.addEventListener("submit", submitOrderRefund);
+    dialogRoot.querySelector("textarea").focus();
+  }
+
+  async function submitOrderRefund(event) {
+    event.preventDefault();
+    const form = event.target;
+    const payload = validateOrderRefundForm(form);
+    const errorNode = form.querySelector("[data-order-refund-error]");
+    if (!payload.valid) {
+      showFormError(errorNode, payload.message);
+      return;
+    }
+    if (!window.confirm("确认提交退票申请？退款完成后电子票将失效，座位会释放。")) {
+      return;
+    }
+    const submit = form.querySelector("[data-order-refund-submit]");
+    submit.disabled = true;
+    submit.textContent = "提交中";
+    showFormError(errorNode, "");
+    setActionButtonsDisabled(true);
+    state.busy = true;
+    try {
+      const refund = await requestOrderRefund(payload.orderId, payload.reason);
+      closeDialog();
+      toast(refund?.orderStatus === "REFUNDED" ? "退票完成，退款已处理" : "退票申请已提交", "success");
+      syncOrderAfterRefund(payload.orderId);
+    } catch (error) {
+      showFormError(errorNode, apiMessage(error));
+      toast(apiMessage(error), "error");
+      submit.disabled = false;
+      submit.textContent = "提交退票申请";
+    } finally {
+      state.busy = false;
+      setActionButtonsDisabled(false);
+    }
+  }
+
+  function validateOrderRefundForm(form) {
+    const data = Object.fromEntries(new FormData(form).entries());
+    const orderId = normalizeId(data.orderId);
+    const reason = String(data.reason || "").trim();
+    if (!/^\d+$/.test(orderId)) {
+      return { valid: false, message: "订单号必须为数字" };
+    }
+    if (reason.length > 255) {
+      return { valid: false, message: "退票原因不能超过 255 个字符" };
+    }
+    return { valid: true, orderId, reason };
+  }
+
+  async function requestOrderRefund(orderId, reason) {
+    return apiPost("/api/user/orders/refund", {
+      orderId: normalizeId(orderId),
+      reason
+    });
+  }
+
+  function syncOrderAfterRefund(orderId) {
+    const resolvedOrderId = normalizeId(orderId);
+    const { path } = parseHash();
+    if (path.startsWith("/checkout/") && normalizeId(path.split("/")[2]) === resolvedOrderId) {
+      renderCheckout(resolvedOrderId);
+      return;
+    }
+    if (path.startsWith("/tickets/") && normalizeId(path.split("/")[2]) === resolvedOrderId) {
+      renderTickets(resolvedOrderId);
+      return;
+    }
+    if (path === "/orders") {
+      renderOrders();
+    }
+  }
+
+  function openRefundRollbackDialog(orderId) {
+    const resolvedOrderId = normalizeId(orderId);
+    if (!/^\d+$/.test(resolvedOrderId)) {
+      toast("订单号无效，无法发起退款回滚", "error");
+      return;
+    }
+    dialogRoot.innerHTML = `
+      <div class="dialog-backdrop">
+        <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="refund-rollback-title">
+          <div class="dialog-head">
+            <h2 id="refund-rollback-title">退款回滚</h2>
+            <button class="btn compact" type="button" data-action="close-dialog">关闭</button>
+          </div>
+          <div class="dialog-body">
+            <form id="refund-rollback-form" class="form-grid">
+              <div class="field">
+                <label for="refund-rollback-order-id">订单号</label>
+                <input id="refund-rollback-order-id" name="orderId" value="${escapeAttr(resolvedOrderId)}" readonly required>
+              </div>
+              <div class="field">
+                <label for="refund-rollback-reason">回滚原因</label>
+                <textarea id="refund-rollback-reason" name="reason" rows="4" maxlength="255" required placeholder="支付退款失败，恢复订单状态"></textarea>
+              </div>
+              <p class="form-error" data-refund-rollback-error hidden></p>
+              <div class="button-row">
+                <button class="btn danger" type="submit" data-refund-rollback-submit>提交回滚</button>
+                <button class="btn" type="button" data-action="close-dialog">取消</button>
+              </div>
+            </form>
+          </div>
+        </section>
+      </div>
+    `;
+    const form = dialogRoot.querySelector("#refund-rollback-form");
+    form.addEventListener("submit", submitRefundRollback);
+    dialogRoot.querySelector("textarea").focus();
+  }
+
+  async function submitRefundRollback(event) {
+    event.preventDefault();
+    const form = event.target;
+    const payload = validateRefundRollbackForm(form);
+    const errorNode = form.querySelector("[data-refund-rollback-error]");
+    if (!payload.valid) {
+      showFormError(errorNode, payload.message);
+      return;
+    }
+    if (!window.confirm("确认提交退款回滚？")) {
+      return;
+    }
+    const submit = form.querySelector("[data-refund-rollback-submit]");
+    submit.disabled = true;
+    submit.textContent = "提交中";
+    showFormError(errorNode, "");
+    setActionButtonsDisabled(true);
+    state.busy = true;
+    try {
+      const order = await requestOrderRefundRollback(payload.orderId, payload.reason);
+      closeDialog();
+      toast("退款回滚已完成", "success");
+      syncOrderAfterRefundRollback(order, payload.orderId);
+    } catch (error) {
+      showFormError(errorNode, apiMessage(error));
+      toast(apiMessage(error), "error");
+      submit.disabled = false;
+      submit.textContent = "提交回滚";
+    } finally {
+      state.busy = false;
+      setActionButtonsDisabled(false);
+    }
+  }
+
+  function validateRefundRollbackForm(form) {
+    const data = Object.fromEntries(new FormData(form).entries());
+    const orderId = normalizeId(data.orderId);
+    const reason = String(data.reason || "").trim();
+    if (!/^\d+$/.test(orderId)) {
+      return { valid: false, message: "订单号必须为数字" };
+    }
+    if (!reason) {
+      return { valid: false, message: "请输入回滚原因" };
+    }
+    if (reason.length > 255) {
+      return { valid: false, message: "回滚原因不能超过 255 个字符" };
+    }
+    return { valid: true, orderId, reason };
+  }
+
+  function showFormError(node, message) {
+    if (!node) {
+      return;
+    }
+    node.textContent = message || "";
+    node.hidden = !message;
+  }
+
+  async function requestOrderRefundRollback(orderId, reason) {
+    return apiPost("/api/order/refund/rollback", {
+      orderId: normalizeId(orderId),
+      reason
+    });
+  }
+
+  function syncOrderAfterRefundRollback(order, fallbackOrderId) {
+    const resolvedOrderId = resolveOrderId(order, fallbackOrderId);
+    const { path } = parseHash();
+    if (path.startsWith("/checkout/") && normalizeId(path.split("/")[2]) === resolvedOrderId) {
+      app.innerHTML = checkoutTemplate(order, readContext(resolvedOrderId), state.checkoutPay[resolvedOrderId], resolvedOrderId);
+      bindCheckout(order, resolvedOrderId);
+      return;
+    }
+    if (path.startsWith("/tickets/") && normalizeId(path.split("/")[2]) === resolvedOrderId) {
+      renderTickets(resolvedOrderId);
+      return;
+    }
+    if (path === "/orders") {
+      renderOrders();
+    }
   }
 
   async function apiGet(path, options) {
@@ -936,6 +1662,14 @@
     return request(path, { method: "POST", body, ...(options || {}) });
   }
 
+  async function apiPut(path, body, options) {
+    return request(path, { method: "PUT", body, ...(options || {}) });
+  }
+
+  async function apiDelete(path, options) {
+    return request(path, { method: "DELETE", ...(options || {}) });
+  }
+
   async function request(path, options) {
     const headers = {
       Accept: "application/json"
@@ -944,7 +1678,11 @@
       headers["Content-Type"] = "application/json";
     }
     if (options.auth !== false && state.token) {
-      headers.Authorization = `Bearer ${state.token}`;
+      headers.Authorization = `${AUTHORIZATION_PREFIX}${state.token}`;
+    }
+    const userId = currentUserId();
+    if (options.auth !== false && userId) {
+      headers[USER_ID_HEADER] = userId;
     }
     let response;
     try {
@@ -983,7 +1721,7 @@
   }
 
   function quoteUnsafeIntegerIds(text) {
-    return text.replace(/"((?:order|pay|lock|user|refund)Id)"\s*:\s*(\d{16,})/g, '"$1":"$2"');
+    return text.replace(/"((?:order|pay|lock|user|refund|address|attendee|show|category|item|seat)Id)"\s*:\s*(\d{16,})/g, '"$1":"$2"');
   }
 
   function apiUrl(path) {
@@ -995,6 +1733,42 @@
 
   function normalizeBaseUrl(value) {
     return String(value || "").replace(/\/+$/, "");
+  }
+
+  function currentUserId() {
+    return normalizeId(state.user?.userId) || parseDevUserId(state.token);
+  }
+
+  function saveUser(user) {
+    state.user = user;
+    localStorage.removeItem(STORAGE_USER);
+  }
+
+  function requireLogin() {
+    if (state.token && currentUserId()) {
+      return true;
+    }
+    app.innerHTML = loginRequiredTemplate();
+    renderAuth();
+    document.querySelector("[data-login-required]")?.addEventListener("click", () => openAuthDialog("login"));
+    return false;
+  }
+
+  function loginRequiredTemplate() {
+    return `
+      <section class="state-box">
+        <h2>请先登录</h2>
+        <p>用户资料、订单、地址和观演人管理需要先登录。</p>
+        <div class="button-row">
+          <button class="btn primary" type="button" data-login-required>登录</button>
+          <button class="btn" type="button" data-action="open-register">注册</button>
+        </div>
+      </section>
+    `;
+  }
+
+  function isProtectedRoute(path) {
+    return path === "/orders" || path.startsWith("/checkout/") || path.startsWith("/tickets/") || path === "/account" || path.startsWith("/account/");
   }
 
   function ensureSelection(showId, availability) {
@@ -1094,7 +1868,7 @@
         <p>${escapeHtml(apiMessage(error))}</p>
         <div class="button-row">
           <button class="btn primary" type="button" id="retry">重试</button>
-          <a class="btn" href="#/">返回场次</a>
+          <a class="btn" href="#/">返回项目</a>
         </div>
       </section>
     `;
@@ -1102,7 +1876,7 @@
   }
 
   function renderNotFound() {
-    app.innerHTML = emptyState("页面不存在", "请从场次列表或订单列表继续。");
+    app.innerHTML = emptyState("页面不存在", "请从项目列表或订单列表继续。");
   }
 
   function emptyState(title, text) {
@@ -1111,6 +1885,15 @@
         <h2>${escapeHtml(title)}</h2>
         <p>${escapeHtml(text)}</p>
       </section>
+    `;
+  }
+
+  function inlineEmpty(title, text) {
+    return `
+      <div class="inline-empty">
+        <h3>${escapeHtml(title)}</h3>
+        <p>${escapeHtml(text)}</p>
+      </div>
     `;
   }
 
@@ -1133,8 +1916,10 @@
 
   function updateNav(path) {
     document.querySelectorAll("[data-nav]").forEach((item) => item.classList.remove("active"));
-    if (path === "/orders") {
+    if (path === "/orders" || path.startsWith("/checkout/") || path.startsWith("/tickets/")) {
       document.querySelector('[data-nav="orders"]')?.classList.add("active");
+    } else if (path === "/account" || path.startsWith("/account/")) {
+      document.querySelector('[data-nav="account"]')?.classList.add("active");
     } else {
       document.querySelector('[data-nav="home"]')?.classList.add("active");
     }
@@ -1161,7 +1946,7 @@
       DRAMA: "戏剧",
       MOVIE: "电影"
     };
-    return map[type] || type || "场次";
+    return map[type] || type || "项目";
   }
 
   function statusText(status) {
@@ -1171,6 +1956,8 @@
       SOLD: "已售",
       PENDING_PAYMENT: "待支付",
       PAID: "已支付",
+      REFUNDING: "退款中",
+      REFUNDED: "已退款",
       CANCELED: "已取消",
       CLOSED: "已关闭",
       WAITING: "待支付",
@@ -1179,9 +1966,79 @@
     return map[status] || status || "-";
   }
 
+  function ticketUnavailableState(status) {
+    const map = {
+      REFUNDING: {
+        title: "退票处理中",
+        description: "退款处理完成后电子票会失效，座位释放结果以订单状态为准。"
+      },
+      REFUNDED: {
+        title: "已退票",
+        description: "退款已处理，电子票已失效。"
+      },
+      CANCELED: {
+        title: "订单已取消",
+        description: "该订单未完成支付，未生成电子票。"
+      },
+      CLOSED: {
+        title: "订单已关闭",
+        description: "该订单已关闭，未生成可用电子票。"
+      }
+    };
+    return map[status] || {
+      title: "尚未出票",
+      description: "订单支付成功后会生成电子票。"
+    };
+  }
+
+  function userStatusText(status) {
+    const value = Number(status);
+    if (value === 1) return "启用";
+    if (value === 0) return "禁用";
+    return status || "-";
+  }
+
+  function certificateTypeText(type) {
+    const map = {
+      ID_CARD: "身份证",
+      PASSPORT: "护照"
+    };
+    return map[type] || type || "-";
+  }
+
   function statusPill(status) {
-    const cls = status === "PAID" || status === "SUCCESS" ? "ok" : status === "PENDING_PAYMENT" || status === "WAITING" ? "warn" : "danger";
+    const cls = status === "PAID" || status === "SUCCESS" ? "ok" : status === "PENDING_PAYMENT" || status === "WAITING" || status === "REFUNDING" ? "warn" : "danger";
     return `<span class="pill ${cls}">${escapeHtml(statusText(status))}</span>`;
+  }
+
+  function formatVenueAddress(venue) {
+    if (!venue) {
+      return "";
+    }
+    if (venue.address) {
+      return venue.address;
+    }
+    const parts = [];
+    [
+      venue.province,
+      venue.city,
+      venue.district,
+      venue.town,
+      venue.village,
+      venue.street,
+      venue.houseNumber,
+      venue.estate,
+      venue.building
+    ].forEach((value) => appendAddressPart(parts, value));
+    return parts.join("");
+  }
+
+  function appendAddressPart(parts, value) {
+    const text = String(value || "").trim();
+    if (!text || parts[parts.length - 1] === text) {
+      return;
+    }
+    parts.push(text);
   }
 
   function formatDateTime(value) {
@@ -1223,6 +2080,10 @@
     } catch (_error) {
       return null;
     }
+  }
+
+  function textField(form, name) {
+    return String(new FormData(form).get(name) || "").trim();
   }
 
   function clamp(value, min, max) {

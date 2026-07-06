@@ -7,6 +7,7 @@ import com.wimone.enjoytix.framework.log.annotation.OperationLog;
 import com.wimone.enjoytix.framework.web.Results;
 import com.wimone.enjoytix.pay.common.PayConstants;
 import com.wimone.enjoytix.pay.dto.req.RefundApplyReqDTO;
+import com.wimone.enjoytix.pay.dto.req.RefundByOrderReqDTO;
 import com.wimone.enjoytix.pay.dto.resp.RefundRespDTO;
 import com.wimone.enjoytix.pay.service.PayService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -46,5 +47,21 @@ public class RefundController {
             @RequestHeader(PayConstants.USER_ID_HEADER) Long userId,
             @Valid @RequestBody RefundApplyReqDTO requestParam) {
         return Results.success(payService.refund(userId, requestParam));
+    }
+
+    @OperationLog("refund-apply-by-order")
+    @Operation(summary = "Apply refund by order", description = "Apply a mock refund for a successful payment by business order id.")
+    @Idempotent(
+            key = "'refund:apply-order:' + #p0 + ':' + #p1.orderId",
+            type = IdempotentTypeEnum.SPEL,
+            keyTimeout = 60,
+            message = "Refund request is being processed"
+    )
+    @PostMapping("/apply-by-order")
+    public Result<RefundRespDTO> applyByOrder(
+            @Parameter(description = "Current user id.", required = true)
+            @RequestHeader(PayConstants.USER_ID_HEADER) Long userId,
+            @Valid @RequestBody RefundByOrderReqDTO requestParam) {
+        return Results.success(payService.refundByOrder(userId, requestParam));
     }
 }

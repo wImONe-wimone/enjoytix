@@ -9,6 +9,9 @@ import com.wimone.enjoytix.order.common.OrderConstants;
 import com.wimone.enjoytix.order.dto.req.OrderCancelReqDTO;
 import com.wimone.enjoytix.order.dto.req.OrderCreateReqDTO;
 import com.wimone.enjoytix.order.dto.req.OrderPaySuccessReqDTO;
+import com.wimone.enjoytix.order.dto.req.OrderRefundApplyReqDTO;
+import com.wimone.enjoytix.order.dto.req.OrderRefundCompleteReqDTO;
+import com.wimone.enjoytix.order.dto.req.OrderRefundRollbackReqDTO;
 import com.wimone.enjoytix.order.dto.resp.OrderCreateRespDTO;
 import com.wimone.enjoytix.order.dto.resp.OrderDetailRespDTO;
 import com.wimone.enjoytix.order.service.OrderService;
@@ -100,6 +103,54 @@ public class OrderController {
     /**
      * 支付成功通知入口
      */
+    @OperationLog("order-refund-apply")
+    @Operation(summary = "Apply order refund", description = "Move a paid order owned by the current user into refunding status.")
+    @Idempotent(
+            key = "'order:refund-apply:' + #p0 + ':' + #p1.orderId",
+            type = IdempotentTypeEnum.SPEL,
+            keyTimeout = 10,
+            message = "Order refund application is being processed"
+    )
+    @PostMapping("/refund/apply")
+    public Result<OrderDetailRespDTO> applyRefund(
+            @Parameter(description = "Current user id.", required = true)
+            @RequestHeader(OrderConstants.USER_ID_HEADER) Long userId,
+            @Valid @RequestBody OrderRefundApplyReqDTO requestParam) {
+        return Results.success(orderService.applyRefund(userId, requestParam));
+    }
+
+    @OperationLog("order-refund-complete")
+    @Operation(summary = "Complete order refund", description = "Release issued tickets and mark a refunding order as refunded.")
+    @Idempotent(
+            key = "'order:refund-complete:' + #p0 + ':' + #p1.orderId",
+            type = IdempotentTypeEnum.SPEL,
+            keyTimeout = 10,
+            message = "Order refund completion is being processed"
+    )
+    @PostMapping("/refund/complete")
+    public Result<OrderDetailRespDTO> completeRefund(
+            @Parameter(description = "Current user id.", required = true)
+            @RequestHeader(OrderConstants.USER_ID_HEADER) Long userId,
+            @Valid @RequestBody OrderRefundCompleteReqDTO requestParam) {
+        return Results.success(orderService.completeRefund(userId, requestParam));
+    }
+
+    @OperationLog("order-refund-rollback")
+    @Operation(summary = "Rollback order refund", description = "Move a refunding order back to paid when payment refund processing fails.")
+    @Idempotent(
+            key = "'order:refund-rollback:' + #p0 + ':' + #p1.orderId",
+            type = IdempotentTypeEnum.SPEL,
+            keyTimeout = 10,
+            message = "Order refund rollback is being processed"
+    )
+    @PostMapping("/refund/rollback")
+    public Result<OrderDetailRespDTO> rollbackRefund(
+            @Parameter(description = "Current user id.", required = true)
+            @RequestHeader(OrderConstants.USER_ID_HEADER) Long userId,
+            @Valid @RequestBody OrderRefundRollbackReqDTO requestParam) {
+        return Results.success(orderService.rollbackRefund(userId, requestParam));
+    }
+
     @OperationLog("order-pay-success")
     @Operation(summary = "Confirm payment success", description = "Internal payment success notification that issues tickets for the order.")
     @Idempotent(

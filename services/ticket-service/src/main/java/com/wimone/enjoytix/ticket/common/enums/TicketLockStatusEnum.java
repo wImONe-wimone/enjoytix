@@ -5,5 +5,6 @@ public enum TicketLockStatusEnum {
     LOCKED,
     RELEASED,
     ISSUED,
-    EXPIRED
+    EXPIRED,
+    REFUNDED
 }

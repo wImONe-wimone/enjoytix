@@ -5,6 +5,8 @@ import com.wimone.enjoytix.framework.log.annotation.OperationLog;
 import com.wimone.enjoytix.framework.web.Results;
 import com.wimone.enjoytix.user.common.UserConstants;
 import com.wimone.enjoytix.user.dto.req.UserOrderCancelReqDTO;
+import com.wimone.enjoytix.user.dto.req.UserOrderRefundReqDTO;
+import com.wimone.enjoytix.user.dto.resp.UserOrderRefundRespDTO;
 import com.wimone.enjoytix.user.remote.dto.OrderDetailRespDTO;
 import com.wimone.enjoytix.user.service.UserOrderService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -60,5 +62,15 @@ public class UserOrderController {
             @RequestHeader(UserConstants.USER_ID_HEADER) Long userId,
             @Valid @RequestBody UserOrderCancelReqDTO requestParam) {
         return Results.success(userOrderService.cancel(userId, requestParam));
+    }
+
+    @OperationLog("user-order-refund")
+    @Operation(summary = "Refund my order", description = "Apply refund, process payment refund, cancel the order, and release issued seats.")
+    @PostMapping("/refund")
+    public Result<UserOrderRefundRespDTO> refund(
+            @Parameter(description = "Current user id.", required = true)
+            @RequestHeader(UserConstants.USER_ID_HEADER) Long userId,
+            @Valid @RequestBody UserOrderRefundReqDTO requestParam) {
+        return Results.success(userOrderService.refund(userId, requestParam));
     }
 }

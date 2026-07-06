@@ -10,6 +10,9 @@ import com.wimone.enjoytix.order.dao.entity.OrderStatusLogDO;
 import com.wimone.enjoytix.order.dto.req.OrderCancelReqDTO;
 import com.wimone.enjoytix.order.dto.req.OrderCreateReqDTO;
 import com.wimone.enjoytix.order.dto.req.OrderPaySuccessReqDTO;
+import com.wimone.enjoytix.order.dto.req.OrderRefundApplyReqDTO;
+import com.wimone.enjoytix.order.dto.req.OrderRefundCompleteReqDTO;
+import com.wimone.enjoytix.order.dto.req.OrderRefundRollbackReqDTO;
 import com.wimone.enjoytix.order.dto.resp.OrderCreateRespDTO;
 import com.wimone.enjoytix.order.dto.resp.OrderDetailRespDTO;
 import com.wimone.enjoytix.order.dto.resp.OrderItemRespDTO;
@@ -23,6 +26,7 @@ import com.wimone.enjoytix.order.remote.dto.TicketIssueRespDTO;
 import com.wimone.enjoytix.order.remote.dto.TicketLockReqDTO;
 import com.wimone.enjoytix.order.remote.dto.TicketLockRespDTO;
 import com.wimone.enjoytix.order.remote.dto.TicketReleaseReqDTO;
+import com.wimone.enjoytix.order.remote.dto.TicketRefundReqDTO;
 import com.wimone.enjoytix.order.repository.OrderRepository;
 import com.wimone.enjoytix.order.service.OrderService;
 import com.wimone.enjoytix.order.service.OrderTimeoutCloseService;
@@ -130,6 +134,51 @@ public class OrderServiceImpl implements OrderService, OrderTimeoutCloseService 
     }
 
     @Override
+    public synchronized OrderDetailRespDTO applyRefund(Long userId, OrderRefundApplyReqDTO requestParam) {
+        OrderDO orderDO = findOrder(requestParam.getOrderId());
+        assertOwner(userId, orderDO);
+        if (OrderStatusEnum.REFUNDED.name().equals(orderDO.getStatus())
+                || OrderStatusEnum.REFUNDING.name().equals(orderDO.getStatus())) {
+            return convert(orderDO);
+        }
+        if (!OrderStatusEnum.PAID.name().equals(orderDO.getStatus())) {
+            throw new ClientException("Only paid orders can be refunded");
+        }
+        changeStatus(orderDO, OrderStatusEnum.REFUNDING, refundReason("refund apply", requestParam.getReason()));
+        return convert(orderDO);
+    }
+
+    @Override
+    public synchronized OrderDetailRespDTO completeRefund(Long userId, OrderRefundCompleteReqDTO requestParam) {
+        OrderDO orderDO = findOrder(requestParam.getOrderId());
+        assertOwner(userId, orderDO);
+        if (OrderStatusEnum.REFUNDED.name().equals(orderDO.getStatus())) {
+            return convert(orderDO);
+        }
+        if (!OrderStatusEnum.REFUNDING.name().equals(orderDO.getStatus())) {
+            throw new ClientException("Only refunding orders can be completed");
+        }
+        refundTicket(orderDO);
+        changeStatus(orderDO, OrderStatusEnum.REFUNDED, "refund complete, refundId=" + requestParam.getRefundId());
+        return convert(orderDO);
+    }
+
+    @Override
+    public synchronized OrderDetailRespDTO rollbackRefund(Long userId, OrderRefundRollbackReqDTO requestParam) {
+        OrderDO orderDO = findOrder(requestParam.getOrderId());
+        assertOwner(userId, orderDO);
+        if (OrderStatusEnum.PAID.name().equals(orderDO.getStatus())
+                || OrderStatusEnum.REFUNDED.name().equals(orderDO.getStatus())) {
+            return convert(orderDO);
+        }
+        if (!OrderStatusEnum.REFUNDING.name().equals(orderDO.getStatus())) {
+            throw new ClientException("Only refunding orders can be rolled back");
+        }
+        changeStatus(orderDO, OrderStatusEnum.PAID, refundReason("refund rollback", requestParam.getReason()));
+        return convert(orderDO);
+    }
+
+    @Override
     public synchronized OrderDetailRespDTO paySuccess(OrderPaySuccessReqDTO requestParam) {
         OrderDO orderDO = findOrder(requestParam.getOrderId());
         if (OrderStatusEnum.PAID.name().equals(orderDO.getStatus())) {
@@ -232,6 +281,13 @@ public class OrderServiceImpl implements OrderService, OrderTimeoutCloseService 
         }
     }
 
+    private void refundTicket(OrderDO orderDO) {
+        var result = ticketRemoteService.refund(orderDO.getUserId(), new TicketRefundReqDTO(orderDO.getLockId(), orderDO.getId()));
+        if (!result.isSuccess()) {
+            throw new RemoteException("Refund issued tickets failed: " + result.getMessage());
+        }
+    }
+
     private TicketIssueRespDTO callTicketIssue(Long userId, TicketIssueReqDTO requestParam) {
         var result = ticketRemoteService.issue(userId, requestParam);
         if (!result.isSuccess()) {
@@ -279,6 +335,13 @@ public class OrderServiceImpl implements OrderService, OrderTimeoutCloseService 
         logDO.setUpdateTime(LocalDateTime.now());
         logDO.setDelFlag(0);
         orderRepository.saveStatusLog(logDO);
+    }
+
+    private String refundReason(String action, String reason) {
+        if (reason == null || reason.isBlank()) {
+            return action;
+        }
+        return action + ": " + reason;
     }
 
     private boolean sameExpireTime(LocalDateTime expectedExpireTime, LocalDateTime actualExpireTime) {

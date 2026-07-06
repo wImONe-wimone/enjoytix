@@ -1,6 +1,8 @@
 package com.wimone.enjoytix.user.service;
 
 import com.wimone.enjoytix.user.dto.req.UserOrderCancelReqDTO;
+import com.wimone.enjoytix.user.dto.req.UserOrderRefundReqDTO;
+import com.wimone.enjoytix.user.dto.resp.UserOrderRefundRespDTO;
 import com.wimone.enjoytix.user.remote.dto.OrderDetailRespDTO;
 
 import java.util.List;
@@ -12,4 +14,6 @@ public interface UserOrderService {
     OrderDetailRespDTO detail(Long userId, Long orderId);
 
     Boolean cancel(Long userId, UserOrderCancelReqDTO requestParam);
+
+    UserOrderRefundRespDTO refund(Long userId, UserOrderRefundReqDTO requestParam);
 }

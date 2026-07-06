@@ -3,6 +3,9 @@ package com.wimone.enjoytix.user.remote;
 import com.wimone.enjoytix.framework.convention.result.Result;
 import com.wimone.enjoytix.user.remote.dto.OrderCancelReqDTO;
 import com.wimone.enjoytix.user.remote.dto.OrderDetailRespDTO;
+import com.wimone.enjoytix.user.remote.dto.OrderRefundApplyReqDTO;
+import com.wimone.enjoytix.user.remote.dto.OrderRefundCompleteReqDTO;
+import com.wimone.enjoytix.user.remote.dto.OrderRefundRollbackReqDTO;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -23,4 +26,13 @@ public interface OrderRemoteService {
 
     @PostMapping("/api/order/cancel")
     Result<Boolean> cancel(@RequestHeader("X-User-Id") Long userId, @RequestBody OrderCancelReqDTO requestParam);
+
+    @PostMapping("/api/order/refund/apply")
+    Result<OrderDetailRespDTO> applyRefund(@RequestHeader("X-User-Id") Long userId, @RequestBody OrderRefundApplyReqDTO requestParam);
+
+    @PostMapping("/api/order/refund/complete")
+    Result<OrderDetailRespDTO> completeRefund(@RequestHeader("X-User-Id") Long userId, @RequestBody OrderRefundCompleteReqDTO requestParam);
+
+    @PostMapping("/api/order/refund/rollback")
+    Result<OrderDetailRespDTO> rollbackRefund(@RequestHeader("X-User-Id") Long userId, @RequestBody OrderRefundRollbackReqDTO requestParam);
 }
