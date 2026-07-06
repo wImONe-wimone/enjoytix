@@ -31,6 +31,8 @@ spring:
                 blackPathPre:
                   - /api/user/me
                   - /api/user/attendees
+                  - /api/user/addresses
+                  - /api/user/orders
                   - /api/user/logout
         - id: enjoytix-performance-service
           uri: lb://enjoytix-performance-service

@@ -3,16 +3,8 @@ package com.wimone.enjoytix.user.dto.req;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 
-@Schema(description = "User registration request.")
-public class UserRegisterReqDTO {
-
-    @NotBlank
-    @Schema(description = "Login username.", example = "alice")
-    private String username;
-
-    @NotBlank
-    @Schema(description = "Login password.", example = "Passw0rd!")
-    private String password;
+@Schema(description = "User profile update request.")
+public class UserProfileUpdateReqDTO {
 
     @NotBlank
     @Schema(description = "Mobile number.", example = "13800000000")
@@ -20,22 +12,6 @@ public class UserRegisterReqDTO {
 
     @Schema(description = "Real name.", example = "Alice")
     private String realName;
-
-    public String getUsername() {
-        return username;
-    }
-
-    public void setUsername(String username) {
-        this.username = username;
-    }
-
-    public String getPassword() {
-        return password;
-    }
-
-    public void setPassword(String password) {
-        this.password = password;
-    }
 
     public String getMobile() {
         return mobile;

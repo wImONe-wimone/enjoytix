@@ -14,5 +14,9 @@ public interface AttendeeService {
 
     Boolean delete(Long userId, Long attendeeId);
 
+    AttendeeRespDTO detail(Long userId, Long attendeeId);
+
+    AttendeeRespDTO setDefault(Long userId, Long attendeeId);
+
     List<AttendeeRespDTO> list(Long userId);
 }

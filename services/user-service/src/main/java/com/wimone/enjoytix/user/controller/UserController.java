@@ -5,6 +5,7 @@ import com.wimone.enjoytix.framework.log.annotation.OperationLog;
 import com.wimone.enjoytix.framework.web.Results;
 import com.wimone.enjoytix.user.common.UserConstants;
 import com.wimone.enjoytix.user.dto.req.UserLoginReqDTO;
+import com.wimone.enjoytix.user.dto.req.UserProfileUpdateReqDTO;
 import com.wimone.enjoytix.user.dto.req.UserRegisterReqDTO;
 import com.wimone.enjoytix.user.dto.resp.UserLoginRespDTO;
 import com.wimone.enjoytix.user.dto.resp.UserRespDTO;
@@ -15,6 +16,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -56,6 +58,16 @@ public class UserController {
         return Results.success(userService.queryByUserId(userId));
     }
 
+    @OperationLog("user-profile-update")
+    @Operation(summary = "Update current user profile", description = "Update mobile and real name for the current user.")
+    @PutMapping("/me")
+    public Result<UserRespDTO> updateMe(
+            @Parameter(description = "Current user id.", required = true)
+            @RequestHeader(UserConstants.USER_ID_HEADER) Long userId,
+            @Valid @RequestBody UserProfileUpdateReqDTO requestParam) {
+        return Results.success(userService.updateProfile(userId, requestParam));
+    }
+
     @Operation(summary = "Get user by id", description = "Query a user profile by user id.")
     @GetMapping("/{userId}")
     public Result<UserRespDTO> queryByUserId(
@@ -64,9 +76,14 @@ public class UserController {
         return Results.success(userService.queryByUserId(userId));
     }
 
-    @Operation(summary = "Logout user", description = "Invalidate the current login session placeholder.")
+    @OperationLog("user-logout")
+    @Operation(summary = "Logout user", description = "Invalidate current user login sessions recorded by user-service.")
     @PostMapping("/logout")
-    public Result<Boolean> logout() {
-        return Results.success(Boolean.TRUE);
+    public Result<Boolean> logout(
+            @Parameter(description = "Current user id.", required = true)
+            @RequestHeader(UserConstants.USER_ID_HEADER) Long userId,
+            @Parameter(description = "Authorization header.", required = false)
+            @RequestHeader(value = UserConstants.AUTHORIZATION_HEADER, required = false) String authorization) {
+        return Results.success(userService.logout(userId, authorization));
     }
 }

@@ -65,6 +65,27 @@ public class AttendeeController {
         return Results.success(attendeeService.update(userId, requestParam));
     }
 
+    @Operation(summary = "Get attendee", description = "Get a real-name attendee owned by the current user.")
+    @GetMapping("/{attendeeId}")
+    public Result<AttendeeRespDTO> detail(
+            @Parameter(description = "Current user id.", required = true)
+            @RequestHeader(UserConstants.USER_ID_HEADER) Long userId,
+            @Parameter(description = "Attendee id.", required = true)
+            @PathVariable Long attendeeId) {
+        return Results.success(attendeeService.detail(userId, attendeeId));
+    }
+
+    @OperationLog("attendee-set-default")
+    @Operation(summary = "Set default attendee", description = "Set a real-name attendee as the default attendee for the current user.")
+    @PutMapping("/{attendeeId}/default")
+    public Result<AttendeeRespDTO> setDefault(
+            @Parameter(description = "Current user id.", required = true)
+            @RequestHeader(UserConstants.USER_ID_HEADER) Long userId,
+            @Parameter(description = "Attendee id.", required = true)
+            @PathVariable Long attendeeId) {
+        return Results.success(attendeeService.setDefault(userId, attendeeId));
+    }
+
     @OperationLog("attendee-delete")
     @Operation(summary = "Delete attendee", description = "Delete a real-name attendee owned by the current user.")
     @DeleteMapping("/{attendeeId}")

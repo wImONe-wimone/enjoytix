@@ -2,6 +2,7 @@ package com.wimone.enjoytix.user.service.impl;
 
 import com.wimone.enjoytix.framework.convention.exception.ClientException;
 import com.wimone.enjoytix.framework.distributedid.core.IdGeneratorManager;
+import com.wimone.enjoytix.user.common.enums.CertificateTypeEnum;
 import com.wimone.enjoytix.user.common.enums.UserStatusEnum;
 import com.wimone.enjoytix.user.dao.entity.AttendeeDO;
 import com.wimone.enjoytix.user.dto.req.AttendeeCreateReqDTO;
@@ -38,7 +39,7 @@ public class AttendeeServiceImpl implements AttendeeService {
         attendeeDO.setCreateTime(LocalDateTime.now());
         attendeeDO.setUpdateTime(LocalDateTime.now());
         attendeeDO.setDelFlag(0);
-        userRepository.saveAttendee(attendeeDO);
+        saveWithDefault(attendeeDO);
         return convert(attendeeDO);
     }
 
@@ -51,7 +52,7 @@ public class AttendeeServiceImpl implements AttendeeService {
         }
         fill(attendeeDO, requestParam);
         attendeeDO.setUpdateTime(LocalDateTime.now());
-        userRepository.saveAttendee(attendeeDO);
+        saveWithDefault(attendeeDO);
         return convert(attendeeDO);
     }
 
@@ -63,9 +64,25 @@ public class AttendeeServiceImpl implements AttendeeService {
             throw new ClientException("Attendee does not belong to current user");
         }
         attendeeDO.setDelFlag(1);
+        attendeeDO.setDefaultFlag(0);
         attendeeDO.setUpdateTime(LocalDateTime.now());
         userRepository.saveAttendee(attendeeDO);
         return Boolean.TRUE;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AttendeeRespDTO detail(Long userId, Long attendeeId) {
+        return convert(findOwnedAttendee(userId, attendeeId));
+    }
+
+    @Override
+    public AttendeeRespDTO setDefault(Long userId, Long attendeeId) {
+        AttendeeDO attendeeDO = findOwnedAttendee(userId, attendeeId);
+        attendeeDO.setDefaultFlag(1);
+        attendeeDO.setUpdateTime(LocalDateTime.now());
+        saveWithDefault(attendeeDO);
+        return convert(attendeeDO);
     }
 
     @Override
@@ -79,12 +96,39 @@ public class AttendeeServiceImpl implements AttendeeService {
         userRepository.findUserById(userId).orElseThrow(() -> new ClientException("User does not exist"));
     }
 
+    private AttendeeDO findOwnedAttendee(Long userId, Long attendeeId) {
+        AttendeeDO attendeeDO = userRepository.findAttendee(attendeeId)
+                .orElseThrow(() -> new ClientException("Attendee does not exist"));
+        if (!userId.equals(attendeeDO.getUserId())) {
+            throw new ClientException("Attendee does not belong to current user");
+        }
+        return attendeeDO;
+    }
+
+    private void saveWithDefault(AttendeeDO attendeeDO) {
+        attendeeDO.setDefaultFlag(Integer.valueOf(1).equals(attendeeDO.getDefaultFlag()) ? 1 : 0);
+        if (Integer.valueOf(1).equals(attendeeDO.getDefaultFlag())) {
+            userRepository.clearDefaultAttendee(attendeeDO.getUserId(), attendeeDO.getId());
+        }
+        userRepository.saveAttendee(attendeeDO);
+    }
+
     private void fill(AttendeeDO attendeeDO, AttendeeCreateReqDTO requestParam) {
+        validateCertificateType(requestParam.getCertificateType());
         attendeeDO.setRealName(requestParam.getRealName());
         attendeeDO.setCertificateType(requestParam.getCertificateType());
         attendeeDO.setCertificateNo(requestParam.getCertificateNo());
         attendeeDO.setMobile(requestParam.getMobile());
         attendeeDO.setDefaultFlag(requestParam.getDefaultFlag() == null ? 0 : requestParam.getDefaultFlag());
+    }
+
+    private void validateCertificateType(String certificateType) {
+        for (CertificateTypeEnum each : CertificateTypeEnum.values()) {
+            if (each.code().equals(certificateType)) {
+                return;
+            }
+        }
+        throw new ClientException("Unsupported certificate type");
     }
 
     private AttendeeRespDTO convert(AttendeeDO attendeeDO) {
