@@ -12,8 +12,8 @@
   const toastRoot = document.querySelector("#toast-root");
 
   const state = {
-    token: "",
-    user: null,
+    token: localStorage.getItem(STORAGE_TOKEN) || "dev-1",
+    user: readJson(STORAGE_USER),
     catalogQuery: {},
     currentDetail: null,
     detailSelection: {},
@@ -21,17 +21,17 @@
     busy: false
   };
 
-  localStorage.removeItem(STORAGE_TOKEN);
-  localStorage.removeItem(STORAGE_USER);
+  if (!localStorage.getItem(STORAGE_TOKEN)) {
+    localStorage.setItem(STORAGE_TOKEN, state.token);
+  }
 
   window.addEventListener("hashchange", route);
   document.addEventListener("click", handleGlobalClick);
+  document.addEventListener("submit", handleGlobalSubmit);
 
   renderAuth();
   route();
-  if (state.token) {
-    refreshUser();
-  }
+  refreshUser();
 
   function handleGlobalClick(event) {
     const action = event.target.closest("[data-action]");
@@ -50,6 +50,16 @@
     }
     if (name === "logout") {
       logout();
+    }
+  }
+
+  function handleGlobalSubmit(event) {
+    if (event.target.id === "token-form") {
+      event.preventDefault();
+      const token = new FormData(event.target).get("token").toString().trim();
+      setToken(token || "dev-1", null);
+      toast("已应用访问令牌", "success");
+      route();
     }
   }
 
@@ -84,16 +94,18 @@
   async function renderCatalog(query) {
     state.catalogQuery = {
       keyword: query.keyword || "",
+      city: query.city || "",
       performanceType: query.performanceType || "",
       showDate: query.showDate || "",
       current: Number(query.current || 1),
       size: 12
     };
-    renderLoading("正在加载文娱票务项目");
+    renderLoading("正在加载场次");
     try {
       const params = new URLSearchParams();
       params.set("current", state.catalogQuery.current);
       params.set("size", state.catalogQuery.size);
+      if (state.catalogQuery.city) params.set("city", state.catalogQuery.city);
       if (state.catalogQuery.performanceType) params.set("performanceType", state.catalogQuery.performanceType);
       if (state.catalogQuery.keyword) params.set("artistName", state.catalogQuery.keyword);
       if (state.catalogQuery.showDate) params.set("showDate", state.catalogQuery.showDate);
@@ -101,7 +113,7 @@
       app.innerHTML = catalogTemplate(page, state.catalogQuery);
       bindCatalog(page);
     } catch (error) {
-      renderError("项目列表加载失败", error, () => renderCatalog(query));
+      renderError("场次加载失败", error, () => renderCatalog(query));
     }
   }
 
@@ -113,7 +125,7 @@
       <section class="band">
         <div class="section-title">
           <div>
-            <h1>文娱票务项目</h1>
+            <h1>演出与电影场次</h1>
             <p>共 ${total} 个可购项目</p>
           </div>
           <div class="button-row">
@@ -124,6 +136,10 @@
           <div class="field">
             <label for="keyword">艺人/团队</label>
             <input id="keyword" name="keyword" value="${escapeAttr(query.keyword)}" placeholder="Aurora / Theatre">
+          </div>
+          <div class="field">
+            <label for="city">城市</label>
+            <input id="city" name="city" value="${escapeAttr(query.city)}" placeholder="Shanghai">
           </div>
           <div class="field">
             <label for="performanceType">类型</label>
@@ -152,14 +168,12 @@
             <span class="muted">第 ${query.current} / ${maxPage} 页</span>
             <button class="btn" data-page="${query.current + 1}" ${query.current >= maxPage ? "disabled" : ""}>下一页</button>
           </div>
-        ` : emptyState("没有匹配项目", "换一个日期、类型或艺人/团队再试。")}
+        ` : emptyState("没有匹配场次", "换一个城市、日期或类型再试。")}
       </section>
     `;
   }
 
   function performanceCard(item) {
-    const venue = item.venue || {};
-    const venueAddress = formatVenueAddress(venue) || "-";
     return `
       <article class="performance-card">
         <a class="poster" href="#/performance/${item.performanceId}" aria-label="${escapeAttr(item.title)}">
@@ -169,12 +183,11 @@
         <div class="performance-body">
           <h3><a href="#/performance/${item.performanceId}">${escapeHtml(item.title)}</a></h3>
           <ul class="meta-list">
-            <li><strong>${escapeHtml(venue.name || "-")}</strong></li>
-            <li>${escapeHtml(venueAddress)}</li>
+            <li><strong>${escapeHtml(item.city || "-")}</strong> · ${escapeHtml(item.venue?.name || "-")}</li>
             <li>${escapeHtml(item.artist?.name || "-")}</li>
             <li>${formatDateTime(item.earliestShowTime)}</li>
           </ul>
-          <a class="btn primary" href="#/performance/${item.performanceId}">选购门票</a>
+          <a class="btn primary" href="#/performance/${item.performanceId}">选择场次</a>
         </div>
       </article>
     `;
@@ -186,7 +199,7 @@
       event.preventDefault();
       const data = Object.fromEntries(new FormData(form).entries());
       const params = new URLSearchParams();
-      for (const key of ["keyword", "performanceType", "showDate"]) {
+      for (const key of ["keyword", "city", "performanceType", "showDate"]) {
         if (data[key]) params.set(key, data[key]);
       }
       window.location.hash = `#/${params.toString() ? `?${params.toString()}` : ""}`;
@@ -196,7 +209,7 @@
         const targetPage = Number(button.dataset.page);
         if (!targetPage || targetPage < 1) return;
         const params = new URLSearchParams();
-        for (const key of ["keyword", "performanceType", "showDate"]) {
+        for (const key of ["keyword", "city", "performanceType", "showDate"]) {
           if (state.catalogQuery[key]) params.set(key, state.catalogQuery[key]);
         }
         params.set("current", targetPage);
@@ -206,12 +219,12 @@
   }
 
   async function renderPerformanceDetail(performanceId, query) {
-    renderLoading("正在加载项目详情");
+    renderLoading("正在加载场次详情");
     try {
       const detail = await apiGet(`/api/performance/${encodeURIComponent(performanceId)}`);
       const showId = Number(query.showId || detail.sessions?.[0]?.showId || 0);
       if (!showId) {
-        app.innerHTML = emptyState("暂无可售时间", "该项目还没有开放售票时间。");
+        app.innerHTML = emptyState("暂无可售场次", "该项目还没有开放场次。");
         return;
       }
       const [availability, seatMap, seats] = await Promise.all([
@@ -223,7 +236,7 @@
       ensureSelection(showId, availability);
       renderDetailFromState();
     } catch (error) {
-      renderError("项目详情加载失败", error, () => renderPerformanceDetail(performanceId, query));
+      renderError("场次详情加载失败", error, () => renderPerformanceDetail(performanceId, query));
     }
   }
 
@@ -235,7 +248,6 @@
     const show = detail.sessions.find((item) => Number(item.showId) === Number(showId)) || detail.sessions[0];
     const category = availability.find((item) => Number(item.categoryId) === Number(selection.categoryId));
     const selectedSeats = selectedSeatDetails(seats, selection.selectedSeats);
-    const venueAddress = formatVenueAddress(detail.venue) || "-";
     app.innerHTML = `
       <section class="detail-layout">
         <div class="detail-main">
@@ -245,19 +257,19 @@
             </div>
             <div class="detail-copy">
               <div class="button-row">
-                <a class="btn ghost compact" href="#/">返回项目</a>
+                <a class="btn ghost compact" href="#/">返回场次</a>
                 <span class="pill ok">${typeText(detail.performanceType)}</span>
               </div>
               <h1>${escapeHtml(detail.title)}</h1>
               <p>${escapeHtml(detail.description || "")}</p>
               <ul class="meta-list">
-                <li><strong>${escapeHtml(detail.venue?.name || "-")}</strong> · ${escapeHtml(venueAddress)}</li>
+                <li><strong>${escapeHtml(detail.venue?.name || "-")}</strong> · ${escapeHtml(detail.venue?.address || detail.city || "-")}</li>
                 <li>${escapeHtml(detail.artist?.name || "-")}</li>
               </ul>
             </div>
           </div>
           <section class="panel">
-            <h2>选择演出时间</h2>
+            <h2>选择场次</h2>
             <div class="segmented">
               ${(detail.sessions || []).map((item) => `
                 <button type="button" data-show-id="${item.showId}" class="${Number(item.showId) === Number(showId) ? "active" : ""}">
@@ -284,7 +296,7 @@
 
   function categoryPanelTemplate(availability, selectedCategoryId) {
     if (!availability.length) {
-      return emptyState("暂无票档", "该演出时间当前没有可售票档。");
+      return emptyState("暂无票档", "该场次当前没有可售票档。");
     }
     return `
       <h2>选择票档</h2>
@@ -318,7 +330,7 @@
       `;
     }
     if (!seatMap || !Array.isArray(seatMap.seats) || !seatMap.seats.length) {
-      return emptyState("暂无座位图", "该演出时间还没有座位图数据。");
+      return emptyState("暂无座位图", "该场次还没有座位图数据。");
     }
     const seatState = new Map(seats.map((seat) => [String(seat.seatId), seat]));
     const rows = [];
@@ -381,7 +393,7 @@
     return `
       <h2>订单确认</h2>
       <div class="summary-line"><span>项目</span><strong>${escapeHtml(detail.title)}</strong></div>
-      <div class="summary-line"><span>演出时间</span><strong>${formatDateTime(show?.showTime)}</strong></div>
+      <div class="summary-line"><span>场次</span><strong>${formatDateTime(show?.showTime)}</strong></div>
       <div class="summary-line"><span>票档</span><strong>${escapeHtml(category?.categoryName || "-")}</strong></div>
       <div class="summary-line"><span>座位</span><strong>${selectedSeats.length ? selectedSeats.map((seat) => escapeHtml(seat.seatNo)).join("、") : "未选择"}</strong></div>
       <div class="summary-line"><span>数量</span><strong>${quantity}</strong></div>
@@ -552,7 +564,7 @@
           <div class="section-title">
             <div>
               <h1>订单 ${escapeHtml(order.orderSn || order.orderId)}</h1>
-              <p>${context?.performanceTitle ? escapeHtml(context.performanceTitle) : `演出时间 #${escapeHtml(order.showId)}`}</p>
+              <p>${context?.performanceTitle ? escapeHtml(context.performanceTitle) : `场次 ${escapeHtml(order.showId)}`}</p>
             </div>
             ${statusPill(order.status)}
           </div>
@@ -711,7 +723,7 @@
         <div class="section-title">
           <div>
             <h1>电子票</h1>
-            <p>${escapeHtml(performance?.title || context?.performanceTitle || `演出时间 #${order.showId}`)}</p>
+            <p>${escapeHtml(performance?.title || context?.performanceTitle || `场次 ${order.showId}`)}</p>
           </div>
           ${statusPill(order.status)}
         </div>
@@ -777,7 +789,7 @@
         </div>
         <ul class="meta-list">
           <li><strong>订单号</strong> ${escapeHtml(order.orderSn || order.orderId)}</li>
-          <li><strong>演出时间</strong> ${context?.showTime ? formatDateTime(context.showTime) : `#${escapeHtml(order.showId)}`}</li>
+          <li><strong>场次</strong> ${context?.showTime ? formatDateTime(context.showTime) : `#${escapeHtml(order.showId)}`}</li>
           <li><strong>金额</strong> ${formatMoney(order.totalAmount)} · <strong>截止</strong> ${formatDateTime(order.payExpireTime)}</li>
         </ul>
         <div class="button-row">
@@ -790,16 +802,15 @@
 
   function renderAuth() {
     const parsedUserId = parseDevUserId(state.token);
-    const label = state.user?.username || (parsedUserId ? `用户 #${parsedUserId}` : "未登录");
     authRoot.innerHTML = `
       <div class="auth-inline">
-        ${state.token ? `
-          <button class="btn compact" type="button">${escapeHtml(label)}</button>
-          <button class="btn ghost compact" type="button" data-action="logout">退出</button>
-        ` : `
-          <button class="btn compact" type="button" data-action="open-login">登录</button>
-          <button class="btn compact" type="button" data-action="open-register">注册</button>
-        `}
+        <form id="token-form" class="auth-inline">
+          <input class="input token-input" name="token" value="${escapeAttr(state.token || "")}" aria-label="访问令牌">
+          <button class="btn compact" type="submit">应用</button>
+        </form>
+        <button class="btn compact" type="button" data-action="open-login">登录</button>
+        <button class="btn compact" type="button" data-action="open-register">注册</button>
+        <button class="btn ghost compact" type="button" data-action="logout">${state.user?.username ? escapeHtml(state.user.username) : `用户 #${parsedUserId || "-"}`}</button>
       </div>
     `;
   }
@@ -831,6 +842,10 @@
                 <div class="field">
                   <label for="auth-real-name">姓名</label>
                   <input id="auth-real-name" name="realName">
+                </div>
+                <div class="field">
+                  <label for="auth-id-card">证件号</label>
+                  <input id="auth-id-card" name="idCard">
                 </div>
               `}
               <button class="btn primary" type="submit">${login ? "登录" : "注册并使用"}</button>
@@ -873,16 +888,10 @@
   }
 
   async function refreshUser() {
-    if (!state.token) {
-      state.user = null;
-      localStorage.removeItem(STORAGE_USER);
-      renderAuth();
-      return;
-    }
     try {
       const user = await apiGet("/api/user/me");
       state.user = user;
-      localStorage.removeItem(STORAGE_USER);
+      localStorage.setItem(STORAGE_USER, JSON.stringify(user));
       renderAuth();
     } catch (_error) {
       state.user = null;
@@ -892,19 +901,21 @@
   }
 
   function setToken(token, user) {
-    state.token = token || "";
-    state.user = user || null;
-    localStorage.removeItem(STORAGE_TOKEN);
-    localStorage.removeItem(STORAGE_USER);
-    if (!user && state.token) {
+    state.token = token;
+    state.user = user;
+    localStorage.setItem(STORAGE_TOKEN, token);
+    if (user) {
+      localStorage.setItem(STORAGE_USER, JSON.stringify(user));
+    } else {
+      localStorage.removeItem(STORAGE_USER);
       refreshUser();
     }
     renderAuth();
   }
 
   function logout() {
-    setToken("", null);
-    toast("已退出登录", "success");
+    setToken("dev-1", null);
+    toast("已切换到 dev-1", "success");
   }
 
   function closeDialog() {
@@ -1083,7 +1094,7 @@
         <p>${escapeHtml(apiMessage(error))}</p>
         <div class="button-row">
           <button class="btn primary" type="button" id="retry">重试</button>
-          <a class="btn" href="#/">返回项目</a>
+          <a class="btn" href="#/">返回场次</a>
         </div>
       </section>
     `;
@@ -1091,7 +1102,7 @@
   }
 
   function renderNotFound() {
-    app.innerHTML = emptyState("页面不存在", "请从项目列表或订单列表继续。");
+    app.innerHTML = emptyState("页面不存在", "请从场次列表或订单列表继续。");
   }
 
   function emptyState(title, text) {
@@ -1150,7 +1161,7 @@
       DRAMA: "戏剧",
       MOVIE: "电影"
     };
-    return map[type] || type || "项目";
+    return map[type] || type || "场次";
   }
 
   function statusText(status) {
@@ -1171,36 +1182,6 @@
   function statusPill(status) {
     const cls = status === "PAID" || status === "SUCCESS" ? "ok" : status === "PENDING_PAYMENT" || status === "WAITING" ? "warn" : "danger";
     return `<span class="pill ${cls}">${escapeHtml(statusText(status))}</span>`;
-  }
-
-  function formatVenueAddress(venue) {
-    if (!venue) {
-      return "";
-    }
-    if (venue.address) {
-      return venue.address;
-    }
-    const parts = [];
-    [
-      venue.province,
-      venue.city,
-      venue.district,
-      venue.town,
-      venue.village,
-      venue.street,
-      venue.houseNumber,
-      venue.estate,
-      venue.building
-    ].forEach((value) => appendAddressPart(parts, value));
-    return parts.join("");
-  }
-
-  function appendAddressPart(parts, value) {
-    const text = String(value || "").trim();
-    if (!text || parts[parts.length - 1] === text) {
-      return;
-    }
-    parts.push(text);
   }
 
   function formatDateTime(value) {

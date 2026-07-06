@@ -119,6 +119,10 @@ button:disabled {
   align-items: center;
 }
 
+.token-input {
+  width: min(220px, 26vw);
+}
+
 .page {
   width: min(1180px, calc(100vw - 32px));
   margin: 0 auto;
@@ -155,7 +159,7 @@ button:disabled {
 
 .toolbar {
   display: grid;
-  grid-template-columns: 1.2fr 0.8fr 0.8fr auto;
+  grid-template-columns: 1.2fr 0.8fr 0.8fr 0.8fr auto;
   gap: 10px;
   padding: 12px;
   border: 1px solid var(--line);
@@ -817,6 +821,9 @@ button:disabled {
     position: static;
   }
 
+  .token-input {
+    width: 100%;
+  }
 }
 
 @media (max-width: 560px) {
@@ -829,6 +836,10 @@ button:disabled {
     display: grid;
     grid-template-columns: 1fr 1fr;
     width: 100%;
+  }
+
+  .auth-inline .token-input {
+    grid-column: 1 / -1;
   }
 
   .section-title,
