@@ -33,6 +33,40 @@ CREATE TABLE IF NOT EXISTS `et_attendee` (
     KEY `idx_attendee_certificate` (`certificate_type`, `certificate_no`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='ticket attendee';
 
+CREATE TABLE IF NOT EXISTS `et_user_address` (
+    `id` BIGINT NOT NULL COMMENT 'primary key',
+    `user_id` BIGINT NOT NULL COMMENT 'owner user id',
+    `receiver_name` VARCHAR(64) NOT NULL COMMENT 'receiver name',
+    `receiver_mobile` VARCHAR(32) NOT NULL COMMENT 'receiver mobile',
+    `province` VARCHAR(64) NOT NULL COMMENT 'province',
+    `city` VARCHAR(64) NOT NULL COMMENT 'city',
+    `district` VARCHAR(64) DEFAULT NULL COMMENT 'district',
+    `detail_address` VARCHAR(255) NOT NULL COMMENT 'detailed address',
+    `postal_code` VARCHAR(16) DEFAULT NULL COMMENT 'postal code',
+    `default_flag` TINYINT NOT NULL DEFAULT 0 COMMENT '1 default address',
+    `create_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `update_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    `del_flag` TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (`id`),
+    KEY `idx_user_address_user_id` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='user address';
+
+CREATE TABLE IF NOT EXISTS `et_user_session` (
+    `id` BIGINT NOT NULL COMMENT 'primary key',
+    `user_id` BIGINT NOT NULL COMMENT 'owner user id',
+    `access_token` VARCHAR(128) NOT NULL COMMENT 'access token',
+    `valid_flag` TINYINT NOT NULL DEFAULT 1 COMMENT '1 valid, 0 invalid',
+    `expire_time` DATETIME(3) NOT NULL COMMENT 'session expire time',
+    `logout_time` DATETIME(3) DEFAULT NULL COMMENT 'logout time',
+    `create_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `update_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    `del_flag` TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_user_session_token` (`access_token`),
+    KEY `idx_user_session_user_id` (`user_id`),
+    KEY `idx_user_session_valid_expire` (`valid_flag`, `expire_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='user login session';
+
 USE `enjoytix_performance`;
 
 CREATE TABLE IF NOT EXISTS `et_artist` (
@@ -49,13 +83,22 @@ CREATE TABLE IF NOT EXISTS `et_artist` (
 CREATE TABLE IF NOT EXISTS `et_venue` (
     `id` BIGINT NOT NULL,
     `name` VARCHAR(128) NOT NULL,
+    `country` VARCHAR(64) NOT NULL DEFAULT '中国',
+    `province` VARCHAR(64) NOT NULL,
     `city` VARCHAR(64) NOT NULL,
-    `address` VARCHAR(255) DEFAULT NULL,
+    `district` VARCHAR(64) NOT NULL,
+    `town` VARCHAR(64) DEFAULT NULL,
+    `village` VARCHAR(64) DEFAULT NULL,
+    `street` VARCHAR(128) NOT NULL,
+    `house_number` VARCHAR(64) NOT NULL,
+    `estate` VARCHAR(128) DEFAULT NULL,
+    `building` VARCHAR(128) DEFAULT NULL,
+    `address` VARCHAR(255) NOT NULL,
     `create_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `update_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
     `del_flag` TINYINT NOT NULL DEFAULT 0,
     PRIMARY KEY (`id`),
-    KEY `idx_venue_city` (`city`)
+    KEY `idx_venue_area` (`province`, `city`, `district`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='venue';
 
 CREATE TABLE IF NOT EXISTS `et_seat_map` (
@@ -96,10 +139,160 @@ CREATE TABLE IF NOT EXISTS `et_performance` (
     `update_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
     `del_flag` TINYINT NOT NULL DEFAULT 0,
     PRIMARY KEY (`id`),
-    KEY `idx_performance_city_type` (`city`, `performance_type`),
+    KEY `idx_performance_type` (`performance_type`),
     KEY `idx_performance_artist_id` (`artist_id`),
     KEY `idx_performance_venue_id` (`venue_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='performance';
+
+DROP PROCEDURE IF EXISTS `add_column_if_missing`;
+DROP PROCEDURE IF EXISTS `add_index_if_missing`;
+DROP PROCEDURE IF EXISTS `drop_index_if_exists`;
+
+DELIMITER //
+
+CREATE PROCEDURE `add_column_if_missing`(
+    IN p_schema VARCHAR(64),
+    IN p_table VARCHAR(64),
+    IN p_column VARCHAR(64),
+    IN p_definition TEXT
+)
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = p_schema
+          AND table_name = p_table
+          AND column_name = p_column
+    ) THEN
+        SET @ddl = CONCAT('ALTER TABLE `', p_schema, '`.`', p_table, '` ADD COLUMN ', p_definition);
+        PREPARE stmt FROM @ddl;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+    END IF;
+END//
+
+CREATE PROCEDURE `add_index_if_missing`(
+    IN p_schema VARCHAR(64),
+    IN p_table VARCHAR(64),
+    IN p_index VARCHAR(64),
+    IN p_definition TEXT
+)
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.statistics
+        WHERE table_schema = p_schema
+          AND table_name = p_table
+          AND index_name = p_index
+    ) THEN
+        SET @ddl = CONCAT('ALTER TABLE `', p_schema, '`.`', p_table, '` ADD ', p_definition);
+        PREPARE stmt FROM @ddl;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+    END IF;
+END//
+
+CREATE PROCEDURE `drop_index_if_exists`(
+    IN p_schema VARCHAR(64),
+    IN p_table VARCHAR(64),
+    IN p_index VARCHAR(64)
+)
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.statistics
+        WHERE table_schema = p_schema
+          AND table_name = p_table
+          AND index_name = p_index
+    ) THEN
+        SET @ddl = CONCAT('ALTER TABLE `', p_schema, '`.`', p_table, '` DROP INDEX `', p_index, '`');
+        PREPARE stmt FROM @ddl;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+    END IF;
+END//
+
+DELIMITER ;
+
+CALL `add_column_if_missing`(DATABASE(), 'et_venue', 'country', '`country` VARCHAR(64) NOT NULL DEFAULT ''中国'' AFTER `name`');
+CALL `add_column_if_missing`(DATABASE(), 'et_venue', 'province', '`province` VARCHAR(64) DEFAULT NULL AFTER `country`');
+CALL `add_column_if_missing`(DATABASE(), 'et_venue', 'district', '`district` VARCHAR(64) DEFAULT NULL AFTER `city`');
+CALL `add_column_if_missing`(DATABASE(), 'et_venue', 'town', '`town` VARCHAR(64) DEFAULT NULL AFTER `district`');
+CALL `add_column_if_missing`(DATABASE(), 'et_venue', 'village', '`village` VARCHAR(64) DEFAULT NULL AFTER `town`');
+CALL `add_column_if_missing`(DATABASE(), 'et_venue', 'street', '`street` VARCHAR(128) DEFAULT NULL AFTER `village`');
+CALL `add_column_if_missing`(DATABASE(), 'et_venue', 'house_number', '`house_number` VARCHAR(64) DEFAULT NULL AFTER `street`');
+CALL `add_column_if_missing`(DATABASE(), 'et_venue', 'estate', '`estate` VARCHAR(128) DEFAULT NULL AFTER `house_number`');
+CALL `add_column_if_missing`(DATABASE(), 'et_venue', 'building', '`building` VARCHAR(128) DEFAULT NULL AFTER `estate`');
+
+UPDATE `et_venue`
+SET
+    `country` = COALESCE(NULLIF(`country`, ''), '中国'),
+    `province` = COALESCE(
+        NULLIF(`province`, ''),
+        CASE
+            WHEN `city` IN ('北京', '北京市', 'Beijing') THEN '北京市'
+            WHEN `city` IN ('上海', '上海市', 'Shanghai') THEN '上海市'
+            ELSE '北京市'
+        END
+    ),
+    `city` = CASE
+        WHEN `city` IN ('北京', 'Beijing') THEN '北京市'
+        WHEN `city` IN ('上海', 'Shanghai') THEN '上海市'
+        WHEN `city` IS NULL OR `city` = '' THEN '北京市'
+        ELSE `city`
+    END,
+    `address` = COALESCE(NULLIF(`address`, ''), CONCAT(COALESCE(NULLIF(`city`, ''), '北京市'), `name`))
+WHERE `country` IS NULL
+   OR `country` = ''
+   OR `province` IS NULL
+   OR `province` = ''
+   OR `city` IS NULL
+   OR `city` = ''
+   OR `address` IS NULL
+   OR `address` = '';
+
+UPDATE `et_venue`
+SET
+    `country` = '中国',
+    `province` = '北京市',
+    `city` = '北京市',
+    `district` = '朝阳区',
+    `town` = NULL,
+    `village` = NULL,
+    `street` = '阜通东大街',
+    `house_number` = '6号',
+    `estate` = NULL,
+    `building` = NULL,
+    `address` = '北京市朝阳区阜通东大街6号'
+WHERE `id` = 200;
+
+UPDATE `et_venue`
+SET
+    `country` = '中国',
+    `province` = '北京市',
+    `city` = '北京市',
+    `district` = '东城区',
+    `town` = NULL,
+    `village` = NULL,
+    `street` = '东长安街',
+    `house_number` = '16号',
+    `estate` = NULL,
+    `building` = NULL,
+    `address` = '北京市东城区东长安街16号'
+WHERE `id` = 201;
+
+UPDATE `et_performance`
+SET `city` = '北京市'
+WHERE `id` IN (1001, 1002);
+
+CALL `add_index_if_missing`(DATABASE(), 'et_venue', 'idx_venue_area', 'KEY `idx_venue_area` (`province`, `city`, `district`)');
+CALL `add_index_if_missing`(DATABASE(), 'et_performance', 'idx_performance_type', 'KEY `idx_performance_type` (`performance_type`)');
+CALL `drop_index_if_exists`(DATABASE(), 'et_venue', 'idx_venue_city');
+CALL `drop_index_if_exists`(DATABASE(), 'et_performance', 'idx_performance_city_type');
+
+DROP PROCEDURE IF EXISTS `add_column_if_missing`;
+DROP PROCEDURE IF EXISTS `add_index_if_missing`;
+DROP PROCEDURE IF EXISTS `drop_index_if_exists`;
 
 CREATE TABLE IF NOT EXISTS `et_show_session` (
     `id` BIGINT NOT NULL,

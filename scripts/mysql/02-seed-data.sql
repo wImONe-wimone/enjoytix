@@ -25,6 +25,21 @@ ON DUPLICATE KEY UPDATE
     `status` = VALUES(`status`),
     `del_flag` = VALUES(`del_flag`);
 
+INSERT INTO `et_user_address` (`id`, `user_id`, `receiver_name`, `receiver_mobile`, `province`, `city`, `district`, `detail_address`, `postal_code`, `default_flag`, `del_flag`)
+VALUES
+    (21, 1, 'Demo User', '13800000001', 'Shanghai', 'Shanghai', 'Pudong', 'No. 1888 Expo Avenue', '200120', 1, 0)
+ON DUPLICATE KEY UPDATE
+    `user_id` = VALUES(`user_id`),
+    `receiver_name` = VALUES(`receiver_name`),
+    `receiver_mobile` = VALUES(`receiver_mobile`),
+    `province` = VALUES(`province`),
+    `city` = VALUES(`city`),
+    `district` = VALUES(`district`),
+    `detail_address` = VALUES(`detail_address`),
+    `postal_code` = VALUES(`postal_code`),
+    `default_flag` = VALUES(`default_flag`),
+    `del_flag` = VALUES(`del_flag`);
+
 USE `enjoytix_performance`;
 
 INSERT INTO `et_artist` (`id`, `name`, `description`, `del_flag`)
@@ -33,11 +48,24 @@ VALUES
     (101, 'North Theatre', 'Modern drama troupe', 0)
 ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `description` = VALUES(`description`), `del_flag` = VALUES(`del_flag`);
 
-INSERT INTO `et_venue` (`id`, `name`, `city`, `address`, `del_flag`)
+INSERT INTO `et_venue` (`id`, `name`, `country`, `province`, `city`, `district`, `town`, `village`, `street`, `house_number`, `estate`, `building`, `address`, `del_flag`)
 VALUES
-    (200, 'Enjoy Arena', 'Shanghai', 'No. 1888 Expo Avenue', 0),
-    (201, 'River Theatre', 'Beijing', 'No. 66 Culture Road', 0)
-ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `city` = VALUES(`city`), `address` = VALUES(`address`), `del_flag` = VALUES(`del_flag`);
+    (200, 'Enjoy Arena', '中国', '北京市', '北京市', '朝阳区', NULL, NULL, '阜通东大街', '6号', NULL, NULL, '北京市朝阳区阜通东大街6号', 0),
+    (201, 'River Theatre', '中国', '北京市', '北京市', '东城区', NULL, NULL, '东长安街', '16号', NULL, NULL, '北京市东城区东长安街16号', 0)
+ON DUPLICATE KEY UPDATE
+    `name` = VALUES(`name`),
+    `country` = VALUES(`country`),
+    `province` = VALUES(`province`),
+    `city` = VALUES(`city`),
+    `district` = VALUES(`district`),
+    `town` = VALUES(`town`),
+    `village` = VALUES(`village`),
+    `street` = VALUES(`street`),
+    `house_number` = VALUES(`house_number`),
+    `estate` = VALUES(`estate`),
+    `building` = VALUES(`building`),
+    `address` = VALUES(`address`),
+    `del_flag` = VALUES(`del_flag`);
 
 INSERT INTO `et_seat_map` (`id`, `name`, `row_count`, `column_count`, `del_flag`)
 VALUES
@@ -53,8 +81,8 @@ ON DUPLICATE KEY UPDATE `venue_id` = VALUES(`venue_id`), `name` = VALUES(`name`)
 
 INSERT INTO `et_performance` (`id`, `title`, `performance_type`, `artist_id`, `venue_id`, `city`, `poster_url`, `description`, `status`, `del_flag`)
 VALUES
-    (1001, 'Aurora Band 2026 Live', 'CONCERT', 100, 200, 'Shanghai', 'https://static.enjoytix.local/posters/aurora-live.jpg', 'A high demand concert used by EnjoyTix MVP flash-sale scenarios', 1, 0),
-    (1002, 'Night Train Drama', 'DRAMA', 101, 201, 'Beijing', 'https://static.enjoytix.local/posters/night-train.jpg', 'Small theatre drama with seat selection', 1, 0)
+    (1001, 'Aurora Band 2026 Live', 'CONCERT', 100, 200, '北京市', 'https://static.enjoytix.local/posters/aurora-live.jpg', 'A high demand concert used by EnjoyTix MVP flash-sale scenarios', 1, 0),
+    (1002, 'Night Train Drama', 'DRAMA', 101, 201, '北京市', 'https://static.enjoytix.local/posters/night-train.jpg', 'Small theatre drama with seat selection', 1, 0)
 ON DUPLICATE KEY UPDATE
     `title` = VALUES(`title`),
     `performance_type` = VALUES(`performance_type`),
