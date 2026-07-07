@@ -38,6 +38,11 @@ spring:
           uri: lb://enjoytix-performance-service
           predicates:
             - Path=/api/performance/**,/api/show/**,/api/venue/**
+          filters:
+            - name: TokenValidate
+              args:
+                blackPathPre:
+                  - /api/performance/admin
         - id: enjoytix-ticket-service
           uri: lb://enjoytix-ticket-service
           predicates:
