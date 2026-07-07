@@ -38,3 +38,6 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+### Runtime logs ###
+deploy/enjoytix-nginx-1.25.4/logs/
