@@ -1,5 +1,6 @@
 package com.wimone.enjoytix.framework.web.config;
 
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 import com.wimone.enjoytix.framework.base.trace.TraceConstants;
 import com.wimone.enjoytix.framework.web.GlobalExceptionHandler;
 import com.wimone.enjoytix.framework.web.filter.TraceIdFilter;
@@ -7,10 +8,14 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.jackson.Jackson2ObjectMapperBuilderCustomizer;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
+import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+import java.math.BigInteger;
 
 @AutoConfiguration
 public class WebAutoConfiguration {
@@ -28,6 +33,15 @@ public class WebAutoConfiguration {
         registrationBean.setOrder(Integer.MIN_VALUE);
         registrationBean.addUrlPatterns("/*");
         return registrationBean;
+    }
+
+    @Bean
+    @ConditionalOnClass(Jackson2ObjectMapperBuilder.class)
+    public Jackson2ObjectMapperBuilderCustomizer enjoyTixLongToStringJacksonCustomizer() {
+        return builder -> {
+            builder.serializerByType(Long.class, ToStringSerializer.instance);
+            builder.serializerByType(BigInteger.class, ToStringSerializer.instance);
+        };
     }
 
     @Bean
