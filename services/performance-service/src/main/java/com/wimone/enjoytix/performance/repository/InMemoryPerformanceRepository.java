@@ -1,12 +1,14 @@
 package com.wimone.enjoytix.performance.repository;
 
 import com.wimone.enjoytix.performance.common.enums.PerformanceTypeEnum;
+import com.wimone.enjoytix.performance.common.enums.PerformanceSaleStatusEnum;
 import com.wimone.enjoytix.performance.dao.entity.ArtistDO;
 import com.wimone.enjoytix.performance.dao.entity.HallDO;
 import com.wimone.enjoytix.performance.dao.entity.PerformanceDO;
 import com.wimone.enjoytix.performance.dao.entity.SeatDO;
 import com.wimone.enjoytix.performance.dao.entity.SeatMapDO;
 import com.wimone.enjoytix.performance.dao.entity.ShowSessionDO;
+import com.wimone.enjoytix.performance.dao.entity.ShowSeatCategoryDO;
 import com.wimone.enjoytix.performance.dao.entity.TicketCategoryDO;
 import com.wimone.enjoytix.performance.dao.entity.VenueDO;
 import jakarta.annotation.PostConstruct;
@@ -33,6 +35,7 @@ public class InMemoryPerformanceRepository implements PerformanceRepository {
     private final Map<Long, PerformanceDO> performances = new ConcurrentHashMap<>();
     private final Map<Long, ShowSessionDO> sessions = new ConcurrentHashMap<>();
     private final Map<Long, TicketCategoryDO> categories = new ConcurrentHashMap<>();
+    private final Map<Long, ShowSeatCategoryDO> seatCategoryMappings = new ConcurrentHashMap<>();
     private final Map<Long, SeatMapDO> seatMaps = new ConcurrentHashMap<>();
     private final Map<Long, SeatDO> seats = new ConcurrentHashMap<>();
 
@@ -71,6 +74,7 @@ public class InMemoryPerformanceRepository implements PerformanceRepository {
                 performance.getId(),
                 hall.getId(),
                 LocalDateTime.of(2026, 8, 16, 19, 30),
+                120,
                 LocalDateTime.of(2026, 7, 20, 12, 0),
                 LocalDateTime.of(2026, 8, 16, 19, 0)
         );
@@ -78,6 +82,7 @@ public class InMemoryPerformanceRepository implements PerformanceRepository {
         ticketCategory(3002L, show.getId(), "A Zone", new BigDecimal("880.00"), 18, 1);
         ticketCategory(3003L, show.getId(), "B Zone", new BigDecimal("580.00"), 18, 1);
         seedSeats(seatMap.getId());
+        seedConcertSeatMappings(show.getId(), seatMap.getId());
 
         ArtistDO dramaArtist = artist(101L, "North Theatre", "Modern drama troupe");
         VenueDO theatre = venue(
@@ -112,26 +117,62 @@ public class InMemoryPerformanceRepository implements PerformanceRepository {
                 drama.getId(),
                 theatreHall.getId(),
                 LocalDateTime.of(2026, 9, 3, 20, 0),
+                110,
                 LocalDateTime.of(2026, 7, 25, 10, 0),
                 LocalDateTime.of(2026, 9, 3, 19, 30)
         );
         ticketCategory(3004L, dramaShow.getId(), "Standard", new BigDecimal("280.00"), 24, 1);
         seedSeats(theatreSeatMap.getId());
+        seedAllSeatMappings(dramaShow.getId(), theatreSeatMap.getId(), 3004L);
     }
 
     @Override
     public List<PerformanceDO> listPerformances() {
-        return performances.values().stream().sorted(Comparator.comparing(PerformanceDO::getId)).toList();
+        return performances.values()
+                .stream()
+                .filter(each -> !Integer.valueOf(1).equals(each.getDelFlag()))
+                .sorted(Comparator.comparing(PerformanceDO::getId))
+                .toList();
     }
 
     @Override
     public Optional<PerformanceDO> findPerformance(Long performanceId) {
-        return Optional.ofNullable(performances.get(performanceId));
+        PerformanceDO performanceDO = performances.get(performanceId);
+        return performanceDO == null || Integer.valueOf(1).equals(performanceDO.getDelFlag())
+                ? Optional.empty()
+                : Optional.of(performanceDO);
+    }
+
+    @Override
+    public Optional<PerformanceDO> findPerformanceForUpdate(Long performanceId) {
+        return findPerformance(performanceId);
+    }
+
+    @Override
+    public void savePerformance(PerformanceDO performanceDO) {
+        performances.put(performanceDO.getId(), performanceDO);
     }
 
     @Override
     public Optional<ArtistDO> findArtist(Long artistId) {
-        return Optional.ofNullable(artists.get(artistId));
+        ArtistDO artistDO = artists.get(artistId);
+        return artistDO == null || Integer.valueOf(1).equals(artistDO.getDelFlag())
+                ? Optional.empty()
+                : Optional.of(artistDO);
+    }
+
+    @Override
+    public void saveArtist(ArtistDO artistDO) {
+        artists.put(artistDO.getId(), artistDO);
+    }
+
+    @Override
+    public List<ArtistDO> listArtists() {
+        return artists.values()
+                .stream()
+                .filter(each -> !Integer.valueOf(1).equals(each.getDelFlag()))
+                .sorted(Comparator.comparing(ArtistDO::getId))
+                .toList();
     }
 
     @Override
@@ -144,12 +185,30 @@ public class InMemoryPerformanceRepository implements PerformanceRepository {
                 .distinct()
                 .map(artists::get)
                 .filter(java.util.Objects::nonNull)
+                .filter(each -> !Integer.valueOf(1).equals(each.getDelFlag()))
                 .toList();
     }
 
     @Override
     public Optional<VenueDO> findVenue(Long venueId) {
-        return Optional.ofNullable(venues.get(venueId));
+        VenueDO venueDO = venues.get(venueId);
+        return venueDO == null || Integer.valueOf(1).equals(venueDO.getDelFlag())
+                ? Optional.empty()
+                : Optional.of(venueDO);
+    }
+
+    @Override
+    public void saveVenue(VenueDO venueDO) {
+        venues.put(venueDO.getId(), venueDO);
+    }
+
+    @Override
+    public List<VenueDO> listVenues() {
+        return venues.values()
+                .stream()
+                .filter(each -> !Integer.valueOf(1).equals(each.getDelFlag()))
+                .sorted(Comparator.comparing(VenueDO::getId))
+                .toList();
     }
 
     @Override
@@ -162,17 +221,62 @@ public class InMemoryPerformanceRepository implements PerformanceRepository {
                 .distinct()
                 .map(venues::get)
                 .filter(java.util.Objects::nonNull)
+                .filter(each -> !Integer.valueOf(1).equals(each.getDelFlag()))
                 .toList();
     }
 
     @Override
+    public long countPerformancesByArtistId(Long artistId) {
+        return performances.values()
+                .stream()
+                .filter(each -> Objects.equals(artistId, each.getArtistId()))
+                .filter(each -> !Integer.valueOf(1).equals(each.getDelFlag()))
+                .count();
+    }
+
+    @Override
+    public long countPerformancesByVenueId(Long venueId) {
+        return performances.values()
+                .stream()
+                .filter(each -> Objects.equals(venueId, each.getVenueId()))
+                .filter(each -> !Integer.valueOf(1).equals(each.getDelFlag()))
+                .count();
+    }
+
+    @Override
     public Optional<HallDO> findHall(Long hallId) {
-        return Optional.ofNullable(halls.get(hallId));
+        HallDO hallDO = halls.get(hallId);
+        return hallDO == null || Integer.valueOf(1).equals(hallDO.getDelFlag())
+                ? Optional.empty()
+                : Optional.of(hallDO);
+    }
+
+    @Override
+    public void saveHall(HallDO hallDO) {
+        halls.put(hallDO.getId(), hallDO);
+    }
+
+    @Override
+    public List<HallDO> listHallsByVenue(Long venueId) {
+        return halls.values()
+                .stream()
+                .filter(each -> Objects.equals(venueId, each.getVenueId()))
+                .filter(each -> !Integer.valueOf(1).equals(each.getDelFlag()))
+                .sorted(Comparator.comparing(HallDO::getId))
+                .toList();
     }
 
     @Override
     public Optional<ShowSessionDO> findShow(Long showId) {
-        return Optional.ofNullable(sessions.get(showId));
+        ShowSessionDO showSessionDO = sessions.get(showId);
+        return showSessionDO == null || Integer.valueOf(1).equals(showSessionDO.getDelFlag())
+                ? Optional.empty()
+                : Optional.of(showSessionDO);
+    }
+
+    @Override
+    public void saveShow(ShowSessionDO showSessionDO) {
+        sessions.put(showSessionDO.getId(), showSessionDO);
     }
 
     @Override
@@ -180,6 +284,7 @@ public class InMemoryPerformanceRepository implements PerformanceRepository {
         return sessions.values()
                 .stream()
                 .filter(each -> Objects.equals(performanceId, each.getPerformanceId()))
+                .filter(each -> !Integer.valueOf(1).equals(each.getDelFlag()))
                 .sorted(Comparator.comparing(ShowSessionDO::getShowTime, Comparator.nullsLast(LocalDateTime::compareTo)))
                 .toList();
     }
@@ -192,8 +297,19 @@ public class InMemoryPerformanceRepository implements PerformanceRepository {
         return sessions.values()
                 .stream()
                 .filter(each -> performanceIds.contains(each.getPerformanceId()))
+                .filter(each -> !Integer.valueOf(1).equals(each.getDelFlag()))
                 .sorted(Comparator.comparing(ShowSessionDO::getPerformanceId, Comparator.nullsLast(Long::compareTo))
                         .thenComparing(ShowSessionDO::getShowTime, Comparator.nullsLast(LocalDateTime::compareTo)))
+                .toList();
+    }
+
+    @Override
+    public List<ShowSessionDO> listShowsByHall(Long hallId) {
+        return sessions.values()
+                .stream()
+                .filter(each -> Objects.equals(hallId, each.getHallId()))
+                .filter(each -> !Integer.valueOf(1).equals(each.getDelFlag()))
+                .sorted(Comparator.comparing(ShowSessionDO::getShowTime, Comparator.nullsLast(LocalDateTime::compareTo)))
                 .toList();
     }
 
@@ -202,13 +318,54 @@ public class InMemoryPerformanceRepository implements PerformanceRepository {
         return categories.values()
                 .stream()
                 .filter(each -> Objects.equals(showId, each.getShowId()))
+                .filter(each -> !Integer.valueOf(1).equals(each.getDelFlag()))
                 .sorted(Comparator.comparing(TicketCategoryDO::getPrice, Comparator.nullsLast(Comparator.reverseOrder())))
                 .toList();
     }
 
     @Override
+    public void saveCategory(TicketCategoryDO categoryDO) {
+        categories.put(categoryDO.getId(), categoryDO);
+    }
+
+    @Override
+    public Optional<TicketCategoryDO> findCategory(Long categoryId) {
+        TicketCategoryDO categoryDO = categories.get(categoryId);
+        return categoryDO == null || Integer.valueOf(1).equals(categoryDO.getDelFlag())
+                ? Optional.empty()
+                : Optional.of(categoryDO);
+    }
+
+    @Override
     public Optional<SeatMapDO> findSeatMap(Long seatMapId) {
-        return Optional.ofNullable(seatMaps.get(seatMapId));
+        SeatMapDO seatMapDO = seatMaps.get(seatMapId);
+        return seatMapDO == null || Integer.valueOf(1).equals(seatMapDO.getDelFlag())
+                ? Optional.empty()
+                : Optional.of(seatMapDO);
+    }
+
+    @Override
+    public void saveSeatMap(SeatMapDO seatMapDO) {
+        seatMaps.put(seatMapDO.getId(), seatMapDO);
+    }
+
+    @Override
+    public Optional<SeatDO> findSeat(Long seatId) {
+        SeatDO seatDO = seats.get(seatId);
+        return seatDO == null || Integer.valueOf(1).equals(seatDO.getDelFlag())
+                ? Optional.empty()
+                : Optional.of(seatDO);
+    }
+
+    @Override
+    public Optional<SeatDO> findSeatBySeatMapPosition(Long seatMapId, Integer rowNo, Integer columnNo) {
+        return seats.values()
+                .stream()
+                .filter(each -> Objects.equals(seatMapId, each.getSeatMapId()))
+                .filter(each -> Objects.equals(rowNo, each.getRowNo()))
+                .filter(each -> Objects.equals(columnNo, each.getColumnNo()))
+                .filter(each -> !Integer.valueOf(1).equals(each.getDelFlag()))
+                .findFirst();
     }
 
     @Override
@@ -216,9 +373,45 @@ public class InMemoryPerformanceRepository implements PerformanceRepository {
         return seats.values()
                 .stream()
                 .filter(each -> Objects.equals(seatMapId, each.getSeatMapId()))
+                .filter(each -> !Integer.valueOf(1).equals(each.getDelFlag()))
                 .sorted(Comparator.comparing(SeatDO::getRowNo, Comparator.nullsLast(Integer::compareTo))
                         .thenComparing(SeatDO::getColumnNo, Comparator.nullsLast(Integer::compareTo)))
                 .toList();
+    }
+
+    @Override
+    public void saveSeat(SeatDO seatDO) {
+        seats.put(seatDO.getId(), seatDO);
+    }
+
+    @Override
+    public List<ShowSeatCategoryDO> listSeatCategoryMappingsByShow(Long showId) {
+        return seatCategoryMappings.values()
+                .stream()
+                .filter(each -> Objects.equals(showId, each.getShowId()))
+                .filter(each -> !Integer.valueOf(1).equals(each.getDelFlag()))
+                .sorted(Comparator.comparing(ShowSeatCategoryDO::getSeatId, Comparator.nullsLast(Long::compareTo)))
+                .toList();
+    }
+
+    @Override
+    public List<ShowSeatCategoryDO> listSeatCategoryMappingsBySeat(Long seatId) {
+        return seatCategoryMappings.values()
+                .stream()
+                .filter(each -> Objects.equals(seatId, each.getSeatId()))
+                .filter(each -> !Integer.valueOf(1).equals(each.getDelFlag()))
+                .sorted(Comparator.comparing(ShowSeatCategoryDO::getShowId, Comparator.nullsLast(Long::compareTo)))
+                .toList();
+    }
+
+    @Override
+    public void saveSeatCategoryMapping(ShowSeatCategoryDO mappingDO) {
+        seatCategoryMappings.put(mappingDO.getId(), mappingDO);
+    }
+
+    @Override
+    public void deleteSeatCategoryMappingsByShow(Long showId) {
+        seatCategoryMappings.values().removeIf(each -> Objects.equals(showId, each.getShowId()));
     }
 
     private ArtistDO artist(Long id, String name, String description) {
@@ -297,17 +490,20 @@ public class InMemoryPerformanceRepository implements PerformanceRepository {
         entity.setPosterUrl(posterUrl);
         entity.setDescription(description);
         entity.setStatus(1);
+        entity.setSaleStatus(PerformanceSaleStatusEnum.ON_SALE.name());
+        entity.setActualSaleTime(LocalDateTime.of(2026, 7, 20, 12, 0));
         entity.setDelFlag(0);
         performances.put(id, entity);
         return entity;
     }
 
-    private ShowSessionDO showSession(Long id, Long performanceId, Long hallId, LocalDateTime showTime, LocalDateTime saleStart, LocalDateTime saleEnd) {
+    private ShowSessionDO showSession(Long id, Long performanceId, Long hallId, LocalDateTime showTime, Integer durationMinutes, LocalDateTime saleStart, LocalDateTime saleEnd) {
         ShowSessionDO entity = new ShowSessionDO();
         entity.setId(id);
         entity.setPerformanceId(performanceId);
         entity.setHallId(hallId);
         entity.setShowTime(showTime);
+        entity.setDurationMinutes(durationMinutes);
         entity.setSaleStartTime(saleStart);
         entity.setSaleEndTime(saleEnd);
         entity.setStatus(1);
@@ -349,5 +545,41 @@ public class InMemoryPerformanceRepository implements PerformanceRepository {
             }
         }
         generatedSeats.forEach(each -> seats.put(each.getId(), each));
+    }
+
+    private void seedConcertSeatMappings(Long showId, Long seatMapId) {
+        long base = seatMapId * 1000;
+        for (int row = 1; row <= 6; row++) {
+            for (int column = 1; column <= 8; column++) {
+                showSeatCategory(showId, concertCategory(row, column), base + row * 100L + column);
+            }
+        }
+    }
+
+    private Long concertCategory(int row, int column) {
+        if (row == 1 || row == 2 && column <= 4) {
+            return 3001L;
+        }
+        if (row == 2 || row == 3 || row == 4 && column <= 6) {
+            return 3002L;
+        }
+        return 3003L;
+    }
+
+    private void seedAllSeatMappings(Long showId, Long seatMapId, Long categoryId) {
+        for (SeatDO seat : listSeatsBySeatMap(seatMapId)) {
+            showSeatCategory(showId, categoryId, seat.getId());
+        }
+    }
+
+    private void showSeatCategory(Long showId, Long categoryId, Long seatId) {
+        ShowSeatCategoryDO entity = new ShowSeatCategoryDO();
+        entity.setId(showId * 1_000_000L + seatId);
+        entity.setShowId(showId);
+        entity.setCategoryId(categoryId);
+        entity.setSeatId(seatId);
+        entity.setSaleLocked(0);
+        entity.setDelFlag(0);
+        seatCategoryMappings.put(entity.getId(), entity);
     }
 }

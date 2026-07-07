@@ -2,6 +2,7 @@ package com.wimone.enjoytix.performance.dto.resp;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Schema(description = "Performance detail response.")
@@ -20,6 +21,12 @@ public record PerformanceDetailRespDTO(
         String description,
         @Schema(description = "Performance status.", example = "1")
         Integer status,
+        @Schema(description = "Sale status.", example = "PENDING_SALE")
+        String saleStatus,
+        @Schema(description = "Scheduled sale start time.")
+        LocalDateTime scheduledSaleTime,
+        @Schema(description = "Actual sale start time.")
+        LocalDateTime actualSaleTime,
         @Schema(description = "Artist information.")
         ArtistRespDTO artist,
         @Schema(description = "Venue information.")

@@ -29,5 +29,11 @@ public record VenueRespDTO(
         @Schema(description = "Building.")
         String building,
         @Schema(description = "Formatted venue address.", example = "北京市朝阳区阜通东大街6号")
-        String address) {
+        String address,
+        @Schema(description = "Seat map row count.", example = "20")
+        Integer seatRowCount,
+        @Schema(description = "Seat map column count.", example = "30")
+        Integer seatColumnCount,
+        @Schema(description = "Active physical seat count.", example = "600")
+        Integer seatCount) {
 }

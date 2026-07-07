@@ -22,6 +22,12 @@ public record PerformanceListRespDTO(
         LocalDateTime earliestShowTime,
         @Schema(description = "Poster URL.")
         String posterUrl,
-        @Schema(description = "Performance status.", example = "1")
-        Integer status) {
+        @Schema(description = "Performance status, 1 means enabled.", example = "1")
+        Integer status,
+        @Schema(description = "Sale status.", example = "PENDING_SALE")
+        String saleStatus,
+        @Schema(description = "Scheduled sale start time.")
+        LocalDateTime scheduledSaleTime,
+        @Schema(description = "Actual sale start time.")
+        LocalDateTime actualSaleTime) {
 }

@@ -10,16 +10,26 @@ import java.time.LocalDate;
 @Schema(description = "Performance page query request.")
 public class PerformancePageQueryReqDTO {
 
+    @Schema(description = "Performance title keyword.", example = "Aurora")
+    private String title;
+
     @Schema(description = "Performance type.", example = "CONCERT")
     private String performanceType;
+
     @Schema(description = "Artist name keyword.", example = "Taylor")
     private String artistName;
+
     @Schema(description = "Venue name keyword.", example = "Mercedes-Benz Arena")
     private String venueName;
 
     @Schema(description = "Show date.", example = "2026-08-01")
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
     private LocalDate showDate;
+
+    @Min(0)
+    @Max(1)
+    @Schema(description = "Performance status, 1 means enabled and 0 means disabled.", example = "1")
+    private Integer status;
 
     @Min(1)
     @Schema(description = "Current page number.", example = "1")
@@ -29,6 +39,14 @@ public class PerformancePageQueryReqDTO {
     @Max(200)
     @Schema(description = "Page size, maximum 200.", example = "20")
     private long size = 20;
+
+    public String getTitle() {
+        return title;
+    }
+
+    public void setTitle(String title) {
+        this.title = title;
+    }
 
     public String getPerformanceType() {
         return performanceType;
@@ -60,6 +78,14 @@ public class PerformancePageQueryReqDTO {
 
     public void setShowDate(LocalDate showDate) {
         this.showDate = showDate;
+    }
+
+    public Integer getStatus() {
+        return status;
+    }
+
+    public void setStatus(Integer status) {
+        this.status = status;
     }
 
     public long getCurrent() {

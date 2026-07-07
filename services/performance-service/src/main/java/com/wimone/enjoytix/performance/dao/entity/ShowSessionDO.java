@@ -11,6 +11,7 @@ public class ShowSessionDO extends BaseDO {
     private Long performanceId;
     private Long hallId;
     private LocalDateTime showTime;
+    private Integer durationMinutes;
     private LocalDateTime saleStartTime;
     private LocalDateTime saleEndTime;
     private Integer status;
@@ -37,6 +38,14 @@ public class ShowSessionDO extends BaseDO {
 
     public void setShowTime(LocalDateTime showTime) {
         this.showTime = showTime;
+    }
+
+    public Integer getDurationMinutes() {
+        return durationMinutes;
+    }
+
+    public void setDurationMinutes(Integer durationMinutes) {
+        this.durationMinutes = durationMinutes;
     }
 
     public LocalDateTime getSaleStartTime() {

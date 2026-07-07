@@ -20,6 +20,6 @@ public record TicketCategoryRespDTO(
         Integer remainingStock,
         @Schema(description = "Whether seat selection is enabled, 1 means enabled.", example = "1")
         Integer seatSelectable,
-        @Schema(description = "Ticket category status.", example = "1")
+        @Schema(description = "Deprecated compatibility field, always 1. Seat sale availability is controlled by assigned seats and locked seats.", example = "1")
         Integer status) {
 }

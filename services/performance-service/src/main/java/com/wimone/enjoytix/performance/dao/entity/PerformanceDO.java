@@ -3,6 +3,8 @@ package com.wimone.enjoytix.performance.dao.entity;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.wimone.enjoytix.framework.database.base.BaseDO;
 
+import java.time.LocalDateTime;
+
 @TableName("et_performance")
 public class PerformanceDO extends BaseDO {
 
@@ -14,6 +16,9 @@ public class PerformanceDO extends BaseDO {
     private String posterUrl;
     private String description;
     private Integer status;
+    private String saleStatus;
+    private LocalDateTime scheduledSaleTime;
+    private LocalDateTime actualSaleTime;
 
     public String getTitle() {
         return title;
@@ -77,5 +82,29 @@ public class PerformanceDO extends BaseDO {
 
     public void setStatus(Integer status) {
         this.status = status;
+    }
+
+    public String getSaleStatus() {
+        return saleStatus;
+    }
+
+    public void setSaleStatus(String saleStatus) {
+        this.saleStatus = saleStatus;
+    }
+
+    public LocalDateTime getScheduledSaleTime() {
+        return scheduledSaleTime;
+    }
+
+    public void setScheduledSaleTime(LocalDateTime scheduledSaleTime) {
+        this.scheduledSaleTime = scheduledSaleTime;
+    }
+
+    public LocalDateTime getActualSaleTime() {
+        return actualSaleTime;
+    }
+
+    public void setActualSaleTime(LocalDateTime actualSaleTime) {
+        this.actualSaleTime = actualSaleTime;
     }
 }

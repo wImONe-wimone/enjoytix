@@ -14,6 +14,8 @@ public record ShowSessionRespDTO(
         Long hallId,
         @Schema(description = "Show time.", example = "2026-08-01T19:30:00")
         LocalDateTime showTime,
+        @Schema(description = "Show duration in minutes.", example = "120")
+        Integer durationMinutes,
         @Schema(description = "Sale start time.", example = "2026-07-01T10:00:00")
         LocalDateTime saleStartTime,
         @Schema(description = "Sale end time.", example = "2026-08-01T19:00:00")

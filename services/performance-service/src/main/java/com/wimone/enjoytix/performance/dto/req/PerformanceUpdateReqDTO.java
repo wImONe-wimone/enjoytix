@@ -1,0 +1,7 @@
+package com.wimone.enjoytix.performance.dto.req;
+
+import io.swagger.v3.oas.annotations.media.Schema;
+
+@Schema(description = "Performance update request.")
+public class PerformanceUpdateReqDTO extends PerformanceCreateReqDTO {
+}

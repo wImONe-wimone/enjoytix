@@ -19,6 +19,17 @@ spring:
         import-check:
           enabled: false
 
+rocketmq:
+  producer:
+    group: ${spring.application.name}-producer
+
+performance:
+  sale-message:
+    topic: enjoytix_performance_sale_start
+    consumer-group: enjoytix_performance_sale_start_cg
+    send-timeout-millis: 3000
+    max-reconsume-times: 5
+
 management:
   endpoints:
     web:
