@@ -135,11 +135,15 @@ CREATE TABLE IF NOT EXISTS `et_performance` (
     `poster_url` VARCHAR(512) DEFAULT NULL,
     `description` VARCHAR(1024) DEFAULT NULL,
     `status` TINYINT NOT NULL DEFAULT 1,
+    `sale_status` VARCHAR(32) NOT NULL DEFAULT 'PENDING_SALE',
+    `scheduled_sale_time` DATETIME(3) DEFAULT NULL,
+    `actual_sale_time` DATETIME(3) DEFAULT NULL,
     `create_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `update_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
     `del_flag` TINYINT NOT NULL DEFAULT 0,
     PRIMARY KEY (`id`),
     KEY `idx_performance_type` (`performance_type`),
+    KEY `idx_performance_sale_status` (`sale_status`),
     KEY `idx_performance_artist_id` (`artist_id`),
     KEY `idx_performance_venue_id` (`venue_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='performance';
@@ -285,20 +289,27 @@ UPDATE `et_performance`
 SET `city` = '北京市'
 WHERE `id` IN (1001, 1002);
 
+CALL `add_column_if_missing`(DATABASE(), 'et_performance', 'sale_status', '`sale_status` VARCHAR(32) NOT NULL DEFAULT ''PENDING_SALE'' AFTER `status`');
+CALL `add_column_if_missing`(DATABASE(), 'et_performance', 'scheduled_sale_time', '`scheduled_sale_time` DATETIME(3) DEFAULT NULL AFTER `sale_status`');
+CALL `add_column_if_missing`(DATABASE(), 'et_performance', 'actual_sale_time', '`actual_sale_time` DATETIME(3) DEFAULT NULL AFTER `scheduled_sale_time`');
+
+UPDATE `et_performance`
+SET `sale_status` = COALESCE(NULLIF(`sale_status`, ''), 'PENDING_SALE')
+WHERE `sale_status` IS NULL
+   OR `sale_status` = '';
+
 CALL `add_index_if_missing`(DATABASE(), 'et_venue', 'idx_venue_area', 'KEY `idx_venue_area` (`province`, `city`, `district`)');
 CALL `add_index_if_missing`(DATABASE(), 'et_performance', 'idx_performance_type', 'KEY `idx_performance_type` (`performance_type`)');
+CALL `add_index_if_missing`(DATABASE(), 'et_performance', 'idx_performance_sale_status', 'KEY `idx_performance_sale_status` (`sale_status`)');
 CALL `drop_index_if_exists`(DATABASE(), 'et_venue', 'idx_venue_city');
 CALL `drop_index_if_exists`(DATABASE(), 'et_performance', 'idx_performance_city_type');
-
-DROP PROCEDURE IF EXISTS `add_column_if_missing`;
-DROP PROCEDURE IF EXISTS `add_index_if_missing`;
-DROP PROCEDURE IF EXISTS `drop_index_if_exists`;
 
 CREATE TABLE IF NOT EXISTS `et_show_session` (
     `id` BIGINT NOT NULL,
     `performance_id` BIGINT NOT NULL,
     `hall_id` BIGINT NOT NULL,
     `show_time` DATETIME(3) NOT NULL,
+    `duration_minutes` INT NOT NULL DEFAULT 120,
     `sale_start_time` DATETIME(3) NOT NULL,
     `sale_end_time` DATETIME(3) NOT NULL,
     `status` TINYINT NOT NULL DEFAULT 1,
@@ -310,6 +321,8 @@ CREATE TABLE IF NOT EXISTS `et_show_session` (
     KEY `idx_show_time` (`show_time`),
     KEY `idx_show_hall_id` (`hall_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='show session';
+
+CALL `add_column_if_missing`(DATABASE(), 'et_show_session', 'duration_minutes', '`duration_minutes` INT NOT NULL DEFAULT 120 AFTER `show_time`');
 
 CREATE TABLE IF NOT EXISTS `et_ticket_category` (
     `id` BIGINT NOT NULL,
@@ -326,6 +339,28 @@ CREATE TABLE IF NOT EXISTS `et_ticket_category` (
     PRIMARY KEY (`id`),
     KEY `idx_ticket_category_show_id` (`show_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='performance ticket category';
+
+CREATE TABLE IF NOT EXISTS `et_show_seat_category` (
+    `id` BIGINT NOT NULL,
+    `show_id` BIGINT NOT NULL,
+    `category_id` BIGINT NOT NULL,
+    `seat_id` BIGINT NOT NULL,
+    `sale_locked` TINYINT NOT NULL DEFAULT 0,
+    `create_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `update_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    `del_flag` TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_show_seat_category_show_seat` (`show_id`, `seat_id`),
+    KEY `idx_show_seat_category_show` (`show_id`),
+    KEY `idx_show_seat_category_category` (`category_id`),
+    KEY `idx_show_seat_category_seat` (`seat_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='show seat to ticket category mapping';
+
+CALL `add_column_if_missing`(DATABASE(), 'et_show_seat_category', 'sale_locked', '`sale_locked` TINYINT NOT NULL DEFAULT 0 AFTER `seat_id`');
+
+DROP PROCEDURE IF EXISTS `add_column_if_missing`;
+DROP PROCEDURE IF EXISTS `add_index_if_missing`;
+DROP PROCEDURE IF EXISTS `drop_index_if_exists`;
 
 CREATE TABLE IF NOT EXISTS `et_seat` (
     `id` BIGINT NOT NULL,

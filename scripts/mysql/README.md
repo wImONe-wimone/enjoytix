@@ -11,7 +11,8 @@ mysql -uroot -p1234 --execute="source scripts/mysql/03-verify-data.sql"
 
 `01-schema.sql` is safe to run against an existing database. It creates missing
 tables and migrates old `enjoytix_performance.et_venue` tables by adding the
-structured address columns before `02-seed-data.sql` writes seed venues.
+structured address columns, and old `et_show_session` tables by adding
+`duration_minutes`, before `02-seed-data.sql` writes seed data.
 
 Schemas:
 

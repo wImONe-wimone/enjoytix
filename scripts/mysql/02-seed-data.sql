@@ -94,14 +94,26 @@ ON DUPLICATE KEY UPDATE
     `status` = VALUES(`status`),
     `del_flag` = VALUES(`del_flag`);
 
-INSERT INTO `et_show_session` (`id`, `performance_id`, `hall_id`, `show_time`, `sale_start_time`, `sale_end_time`, `status`, `del_flag`)
+UPDATE `et_performance`
+SET
+    `sale_status` = 'ON_SALE',
+    `scheduled_sale_time` = NULL,
+    `actual_sale_time` = CASE
+        WHEN `id` = 1001 THEN '2026-07-20 12:00:00.000'
+        WHEN `id` = 1002 THEN '2026-07-25 10:00:00.000'
+        ELSE `actual_sale_time`
+    END
+WHERE `id` IN (1001, 1002);
+
+INSERT INTO `et_show_session` (`id`, `performance_id`, `hall_id`, `show_time`, `duration_minutes`, `sale_start_time`, `sale_end_time`, `status`, `del_flag`)
 VALUES
-    (2001, 1001, 300, '2026-08-16 19:30:00.000', '2026-07-20 12:00:00.000', '2026-08-16 19:00:00.000', 1, 0),
-    (2002, 1002, 301, '2026-09-03 20:00:00.000', '2026-07-25 10:00:00.000', '2026-09-03 19:30:00.000', 1, 0)
+    (2001, 1001, 300, '2026-08-16 19:30:00.000', 120, '2026-07-20 12:00:00.000', '2026-08-16 19:00:00.000', 1, 0),
+    (2002, 1002, 301, '2026-09-03 20:00:00.000', 110, '2026-07-25 10:00:00.000', '2026-09-03 19:30:00.000', 1, 0)
 ON DUPLICATE KEY UPDATE
     `performance_id` = VALUES(`performance_id`),
     `hall_id` = VALUES(`hall_id`),
     `show_time` = VALUES(`show_time`),
+    `duration_minutes` = VALUES(`duration_minutes`),
     `sale_start_time` = VALUES(`sale_start_time`),
     `sale_end_time` = VALUES(`sale_end_time`),
     `status` = VALUES(`status`),
@@ -181,6 +193,42 @@ ON DUPLICATE KEY UPDATE
 
 DROP TEMPORARY TABLE IF EXISTS `tmp_seed_rows`;
 DROP TEMPORARY TABLE IF EXISTS `tmp_seed_columns`;
+
+INSERT INTO `et_show_seat_category` (`id`, `show_id`, `category_id`, `seat_id`, `del_flag`)
+SELECT
+    2001 * 1000000 + s.`id`,
+    2001,
+    CASE
+        WHEN s.`row_no` = 1 OR (s.`row_no` = 2 AND s.`column_no` <= 4) THEN 3001
+        WHEN s.`row_no` = 2 OR s.`row_no` = 3 OR (s.`row_no` = 4 AND s.`column_no` <= 6) THEN 3002
+        ELSE 3003
+    END,
+    s.`id`,
+    0
+FROM `et_seat` s
+WHERE s.`seat_map_id` = 400
+  AND s.`del_flag` = 0
+ON DUPLICATE KEY UPDATE
+    `show_id` = VALUES(`show_id`),
+    `category_id` = VALUES(`category_id`),
+    `seat_id` = VALUES(`seat_id`),
+    `del_flag` = VALUES(`del_flag`);
+
+INSERT INTO `et_show_seat_category` (`id`, `show_id`, `category_id`, `seat_id`, `del_flag`)
+SELECT
+    2002 * 1000000 + s.`id`,
+    2002,
+    3004,
+    s.`id`,
+    0
+FROM `et_seat` s
+WHERE s.`seat_map_id` = 401
+  AND s.`del_flag` = 0
+ON DUPLICATE KEY UPDATE
+    `show_id` = VALUES(`show_id`),
+    `category_id` = VALUES(`category_id`),
+    `seat_id` = VALUES(`seat_id`),
+    `del_flag` = VALUES(`del_flag`);
 
 USE `enjoytix_ticket`;
 
