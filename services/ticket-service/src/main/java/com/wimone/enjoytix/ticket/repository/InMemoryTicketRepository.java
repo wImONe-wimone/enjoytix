@@ -21,8 +21,8 @@ import java.util.concurrent.locks.ReentrantLock;
 @Profile("!mysql")
 public class InMemoryTicketRepository implements TicketRepository {
 
-    private final Map<Long, TicketStockDO> stocks = new ConcurrentHashMap<>();
-    private final Map<Long, SeatStockDO> seats = new ConcurrentHashMap<>();
+    private final Map<String, TicketStockDO> stocks = new ConcurrentHashMap<>();
+    private final Map<String, SeatStockDO> seats = new ConcurrentHashMap<>();
     private final Map<Long, TicketLockDO> locks = new ConcurrentHashMap<>();
     private final Map<Long, TicketIssueDO> issues = new ConcurrentHashMap<>();
     private final Map<Long, ReentrantLock> showLocks = new ConcurrentHashMap<>();
@@ -59,7 +59,7 @@ public class InMemoryTicketRepository implements TicketRepository {
 
     @Override
     public void saveStock(TicketStockDO stockDO) {
-        stocks.put(stockDO.getId(), stockDO);
+        stocks.put(stockKey(stockDO.getShowId(), stockDO.getCategoryId()), stockDO);
     }
 
     @Override
@@ -73,13 +73,12 @@ public class InMemoryTicketRepository implements TicketRepository {
 
     @Override
     public Optional<SeatStockDO> findSeat(Long showId, Long seatId) {
-        SeatStockDO seat = seats.get(seatId);
-        return seat == null || !showId.equals(seat.getShowId()) ? Optional.empty() : Optional.of(seat);
+        return Optional.ofNullable(seats.get(seatKey(showId, seatId)));
     }
 
     @Override
     public void saveSeat(SeatStockDO seatDO) {
-        seats.put(seatDO.getSeatId(), seatDO);
+        seats.put(seatKey(seatDO.getShowId(), seatDO.getSeatId()), seatDO);
     }
 
     @Override
@@ -112,7 +111,7 @@ public class InMemoryTicketRepository implements TicketRepository {
 
     private void stock(Long showId, Long categoryId, String name, BigDecimal price, Integer totalStock, Integer seatSelectable) {
         TicketStockDO entity = new TicketStockDO();
-        entity.setId(stockKey(showId, categoryId));
+        entity.setId(seedStockId(showId, categoryId));
         entity.setShowId(showId);
         entity.setCategoryId(categoryId);
         entity.setCategoryName(name);
@@ -122,7 +121,7 @@ public class InMemoryTicketRepository implements TicketRepository {
         entity.setSoldStock(0);
         entity.setSeatSelectable(seatSelectable);
         entity.setDelFlag(0);
-        stocks.put(entity.getId(), entity);
+        stocks.put(stockKey(showId, categoryId), entity);
     }
 
     private void seedConcertSeats() {
@@ -168,10 +167,18 @@ public class InMemoryTicketRepository implements TicketRepository {
         entity.setSeatNo((char) ('A' + rowNo - 1) + String.valueOf(columnNo));
         entity.setStatus(SeatStockStatusEnum.AVAILABLE.name());
         entity.setDelFlag(0);
-        seats.put(seatId, entity);
+        seats.put(seatKey(showId, seatId), entity);
     }
 
-    private Long stockKey(Long showId, Long categoryId) {
+    private String stockKey(Long showId, Long categoryId) {
+        return showId + ":" + categoryId;
+    }
+
+    private String seatKey(Long showId, Long seatId) {
+        return showId + ":" + seatId;
+    }
+
+    private Long seedStockId(Long showId, Long categoryId) {
         return showId * 100000L + categoryId;
     }
 }

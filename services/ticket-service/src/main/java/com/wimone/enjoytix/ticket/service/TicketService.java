@@ -4,6 +4,8 @@ import com.wimone.enjoytix.ticket.dto.req.TicketIssueReqDTO;
 import com.wimone.enjoytix.ticket.dto.req.TicketLockReqDTO;
 import com.wimone.enjoytix.ticket.dto.req.TicketReleaseReqDTO;
 import com.wimone.enjoytix.ticket.dto.req.TicketRefundReqDTO;
+import com.wimone.enjoytix.ticket.dto.req.TicketShowStockInitReqDTO;
+import com.wimone.enjoytix.ticket.dto.req.TicketShowStockConfigInitReqDTO;
 import com.wimone.enjoytix.ticket.dto.resp.SeatAvailabilityRespDTO;
 import com.wimone.enjoytix.ticket.dto.resp.TicketAvailabilityRespDTO;
 import com.wimone.enjoytix.ticket.dto.resp.TicketIssueRespDTO;
@@ -24,4 +26,8 @@ public interface TicketService {
     TicketIssueRespDTO issue(Long userId, TicketIssueReqDTO requestParam);
 
     Boolean refund(Long userId, TicketRefundReqDTO requestParam);
+
+    Boolean initShowStock(TicketShowStockInitReqDTO requestParam);
+
+    Boolean initConfiguredShowStock(TicketShowStockConfigInitReqDTO requestParam);
 }

@@ -10,6 +10,8 @@ import com.wimone.enjoytix.ticket.dto.req.TicketIssueReqDTO;
 import com.wimone.enjoytix.ticket.dto.req.TicketLockReqDTO;
 import com.wimone.enjoytix.ticket.dto.req.TicketReleaseReqDTO;
 import com.wimone.enjoytix.ticket.dto.req.TicketRefundReqDTO;
+import com.wimone.enjoytix.ticket.dto.req.TicketShowStockConfigInitReqDTO;
+import com.wimone.enjoytix.ticket.dto.req.TicketShowStockInitReqDTO;
 import com.wimone.enjoytix.ticket.dto.resp.SeatAvailabilityRespDTO;
 import com.wimone.enjoytix.ticket.dto.resp.TicketAvailabilityRespDTO;
 import com.wimone.enjoytix.ticket.dto.resp.TicketIssueRespDTO;
@@ -131,5 +133,25 @@ public class TicketController {
             @RequestHeader(TicketConstants.USER_ID_HEADER) Long userId,
             @Valid @RequestBody TicketRefundReqDTO requestParam) {
         return Results.success(ticketService.refund(userId, requestParam));
+    }
+
+    @OperationLog("ticket-admin-show-stock-init")
+    @Operation(summary = "Init show stock", description = "Copy ticket stock and seat stock from one show session to another.")
+    @PostMapping("/admin/shows/init-stock")
+    public Result<Boolean> initShowStock(
+            @Parameter(description = "Current operator user id.", required = true)
+            @RequestHeader(TicketConstants.USER_ID_HEADER) Long operatorId,
+            @Valid @RequestBody TicketShowStockInitReqDTO requestParam) {
+        return Results.success(ticketService.initShowStock(requestParam));
+    }
+
+    @OperationLog("ticket-admin-show-stock-config-init")
+    @Operation(summary = "Init configured show stock", description = "Initialize ticket stock and seat stock from performance-service ticket category configuration.")
+    @PostMapping("/admin/shows/init-stock/config")
+    public Result<Boolean> initConfiguredShowStock(
+            @Parameter(description = "Current operator user id.", required = true)
+            @RequestHeader(TicketConstants.USER_ID_HEADER) Long operatorId,
+            @Valid @RequestBody TicketShowStockConfigInitReqDTO requestParam) {
+        return Results.success(ticketService.initConfiguredShowStock(requestParam));
     }
 }
