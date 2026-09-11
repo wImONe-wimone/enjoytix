@@ -22,6 +22,7 @@
         <module>pay-service</module>
         <module>marketing-service</module>
         <module>aggregation-service</module>
+        <module>comment-service</module>
     </modules>
 
     <dependencies>

@@ -54,6 +54,7 @@ enjoytix
 │  ├─ order-service/              # 下单、取消、支付确认、超时关闭
 │  ├─ pay-service/                # 支付单、模拟支付、退款
 │  ├─ marketing-service/          # 营销扩展模块
+│  ├─ comment-service/            # 项目讨论、回复、评分与购票评价
 │  └─ aggregation-service/        # 聚合扩展模块
 ├─ tests/
 │  └─ mvp-flow-test/              # 端到端购票主链路测试

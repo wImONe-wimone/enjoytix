@@ -694,3 +694,71 @@ CREATE TABLE IF NOT EXISTS `et_user_coupon` (
     KEY `idx_user_coupon_user_id` (`user_id`),
     KEY `idx_user_coupon_coupon_id` (`coupon_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='user coupon';
+
+USE `enjoytix_comment`;
+
+CREATE TABLE IF NOT EXISTS `et_project_chat_message` (
+    `id` BIGINT NOT NULL,
+    `performance_id` BIGINT NOT NULL COMMENT 'performance project id',
+    `user_id` BIGINT NOT NULL COMMENT 'author user id',
+    `content` VARCHAR(1000) NOT NULL COMMENT 'chat message content',
+    `edit_count` INT NOT NULL DEFAULT 0 COMMENT 'edit count',
+    `create_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `update_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    `del_flag` TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (`id`),
+    KEY `idx_chat_perf_time` (`performance_id`, `create_time`, `id`),
+    KEY `idx_chat_user_time` (`user_id`, `create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='project chat message';
+
+CREATE TABLE IF NOT EXISTS `et_project_chat_reply` (
+    `id` BIGINT NOT NULL,
+    `message_id` BIGINT NOT NULL COMMENT 'parent chat message id',
+    `performance_id` BIGINT NOT NULL COMMENT 'performance project id',
+    `user_id` BIGINT NOT NULL COMMENT 'reply author user id',
+    `content` VARCHAR(1000) NOT NULL COMMENT 'reply content',
+    `edit_count` INT NOT NULL DEFAULT 0 COMMENT 'edit count',
+    `create_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `update_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    `del_flag` TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (`id`),
+    KEY `idx_reply_message_id` (`message_id`, `id`),
+    KEY `idx_reply_perf_time` (`performance_id`, `create_time`, `id`),
+    KEY `idx_reply_user_time` (`user_id`, `create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='project chat message reply';
+
+CREATE TABLE IF NOT EXISTS `et_project_review` (
+    `id` BIGINT NOT NULL,
+    `performance_id` BIGINT NOT NULL COMMENT 'performance project id',
+    `user_id` BIGINT NOT NULL COMMENT 'review user id',
+    `order_id` BIGINT DEFAULT NULL COMMENT 'related paid order id',
+    `rating` TINYINT NOT NULL COMMENT 'rating from 1 to 5',
+    `content` VARCHAR(2000) NOT NULL COMMENT 'review content',
+    `edit_count` INT NOT NULL DEFAULT 0 COMMENT 'edit count',
+    `create_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `update_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    `del_flag` TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_review_perf_user` (`performance_id`, `user_id`),
+    KEY `idx_review_perf_time` (`performance_id`, `create_time`, `id`),
+    KEY `idx_review_rating` (`performance_id`, `rating`),
+    CONSTRAINT `ck_project_review_rating` CHECK (`rating` BETWEEN 1 AND 5)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='project purchased-user review';
+
+CREATE TABLE IF NOT EXISTS `et_project_rating_summary` (
+    `id` BIGINT NOT NULL,
+    `performance_id` BIGINT NOT NULL COMMENT 'performance project id',
+    `review_count` INT NOT NULL DEFAULT 0 COMMENT 'active review count',
+    `rating_sum` INT NOT NULL DEFAULT 0 COMMENT 'sum of active review ratings',
+    `avg_rating` DECIMAL(3, 2) NOT NULL DEFAULT 0.00 COMMENT 'average rating',
+    `star_1_count` INT NOT NULL DEFAULT 0,
+    `star_2_count` INT NOT NULL DEFAULT 0,
+    `star_3_count` INT NOT NULL DEFAULT 0,
+    `star_4_count` INT NOT NULL DEFAULT 0,
+    `star_5_count` INT NOT NULL DEFAULT 0,
+    `create_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `update_time` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    `del_flag` TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_rating_summary_perf` (`performance_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='project rating summary';

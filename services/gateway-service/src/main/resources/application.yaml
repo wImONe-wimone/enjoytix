@@ -77,6 +77,15 @@ spring:
           uri: lb://enjoytix-marketing-service
           predicates:
             - Path=/api/marketing/**
+        - id: enjoytix-comment-service
+          uri: lb://enjoytix-comment-service
+          predicates:
+            - Path=/api/comment/**
+          filters:
+            - name: TokenValidate
+              args:
+                blackPathPre:
+                  - /api/comment
         - id: enjoytix-user-service-openapi
           uri: lb://enjoytix-user-service
           predicates:
@@ -107,6 +116,12 @@ spring:
             - Path=/v3/api-docs/pay-service
           filters:
             - RewritePath=/v3/api-docs/pay-service, /v3/api-docs/enjoytix-api
+        - id: enjoytix-comment-service-openapi
+          uri: lb://enjoytix-comment-service
+          predicates:
+            - Path=/v3/api-docs/comment-service
+          filters:
+            - RewritePath=/v3/api-docs/comment-service, /v3/api-docs/enjoytix-api
 
 springdoc:
   swagger-ui:
@@ -122,6 +137,8 @@ springdoc:
         url: /v3/api-docs/order-service
       - name: pay-service
         url: /v3/api-docs/pay-service
+      - name: comment-service
+        url: /v3/api-docs/comment-service
 
 management:
   endpoints:
