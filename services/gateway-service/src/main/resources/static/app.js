@@ -18,6 +18,7 @@
     user: null,
     catalogQuery: {},
     currentDetail: null,
+    commentPanel: null,
     detailSelection: {},
     checkoutPay: {},
     adminOptions: {
@@ -127,6 +128,10 @@
 
     if (path === "/" || path === "") {
       renderCatalog(query);
+      return;
+    }
+    if (path.startsWith("/performance/") && path.split("/")[3] === "purchase") {
+      renderPerformancePurchase(path.split("/")[2], query);
       return;
     }
     if (path.startsWith("/performance/")) {
@@ -258,15 +263,17 @@
           </ul>
           <div class="button-row">
             ${saleStatusPill(item.saleStatus)}
-            <a class="btn ${onSale ? "primary" : ""}" href="#/performance/${performanceId}">${onSale ? "选购门票" : "查看详情"}</a>
+            <a class="btn ${onSale ? "primary" : ""}" href="#/performance/${performanceId}">查看详情</a>
           </div>
         </div>
       </article>
     `;
   }
 
-  function performancePreSaleTemplate(detail, sessions) {
+  function performanceInfoTemplate(detail, sessions) {
     const venueAddress = formatVenueAddress(detail.venue) || "-";
+    const performanceId = normalizeId(detail.performanceId);
+    const canPurchase = isOnSale(detail) && sessions.length > 0;
     return `
       <section class="detail-layout">
         <div class="detail-main">
@@ -285,8 +292,12 @@
               <ul class="meta-list">
                 <li><strong>${escapeHtml(detail.venue?.name || "-")}</strong> · ${escapeHtml(venueAddress)}</li>
                 <li>${escapeHtml(detail.artist?.name || "-")}</li>
-                <li>定时开售 ${formatDateTime(detail.scheduledSaleTime)}</li>
+                ${detail.scheduledSaleTime ? `<li>定时开售 ${formatDateTime(detail.scheduledSaleTime)}</li>` : ""}
+                ${detail.earliestShowTime ? `<li>最早场次 ${formatDateTime(detail.earliestShowTime)}</li>` : ""}
               </ul>
+              <div class="button-row">
+                ${canPurchase ? `<a class="btn primary" href="#/performance/${performanceId}/purchase">购票</a>` : `<button class="btn" type="button" disabled>暂不可购票</button>`}
+              </div>
             </div>
           </div>
           <section class="panel">
@@ -302,6 +313,7 @@
               </div>
             ` : inlineEmpty("暂无场次", "该项目还没有开放可展示的演出场次。")}
           </section>
+          ${commentPanelTemplate(detail.performanceId)}
         </div>
         <aside class="panel summary-panel">
           <div class="state-box">
@@ -309,6 +321,21 @@
             <p class="muted">${escapeHtml(saleStatusDescription(detail))}</p>
           </div>
         </aside>
+      </section>
+    `;
+  }
+
+  function performancePurchaseUnavailableTemplate(detail, sessions) {
+    const performanceId = normalizeId(detail.performanceId);
+    return `
+      <section class="state-box">
+        <h2>${escapeHtml(saleStatusText(detail.saleStatus))}</h2>
+        <p>${escapeHtml(saleStatusDescription(detail))}</p>
+        ${sessions.length ? `<p class="muted">当前展示 ${sessions.length} 个演出场次，但项目尚未开放购票。</p>` : ""}
+        <div class="button-row">
+          <a class="btn primary" href="#/performance/${performanceId}">返回项目详情</a>
+          <a class="btn" href="#/">返回项目列表</a>
+        </div>
       </section>
     `;
   }
@@ -505,16 +532,30 @@
     try {
       const detail = await apiGet(`/api/performance/${encodeURIComponent(performanceId)}`);
       const activeSessions = (detail.sessions || []).filter((item) => Number(item.status) === 1);
+      state.currentDetail = null;
+      app.innerHTML = performanceInfoTemplate(detail, activeSessions);
+      mountCommentPanel(detail.performanceId);
+    } catch (error) {
+      renderError("项目详情加载失败", error, () => renderPerformanceDetail(performanceId, query));
+    }
+  }
+
+  async function renderPerformancePurchase(performanceId, query) {
+    renderLoading("正在加载购票信息");
+    try {
+      const detail = await apiGet(`/api/performance/${encodeURIComponent(performanceId)}`);
+      const activeSessions = (detail.sessions || []).filter((item) => Number(item.status) === 1);
       if (!isOnSale(detail)) {
         state.currentDetail = null;
-        app.innerHTML = performancePreSaleTemplate(detail, activeSessions);
+        app.innerHTML = performancePurchaseUnavailableTemplate(detail, activeSessions);
         return;
       }
       const requestedShowId = normalizeId(query.showId);
       const selectedSession = activeSessions.find((item) => normalizeId(item.showId) === requestedShowId) || activeSessions[0];
       const showId = normalizeId(selectedSession?.showId);
       if (!showId) {
-        app.innerHTML = emptyState("暂无可售场次", "该项目还没有开放售票的演出场次。");
+        state.currentDetail = null;
+        app.innerHTML = performancePurchaseUnavailableTemplate(detail, activeSessions);
         return;
       }
       const [availability, seatMap, seats] = await Promise.all([
@@ -524,13 +565,13 @@
       ]);
       state.currentDetail = { detail: { ...detail, sessions: activeSessions }, showId, availability, seatMap, seats };
       ensureSelection(showId, availability);
-      renderDetailFromState();
+      renderPurchaseFromState();
     } catch (error) {
-      renderError("项目详情加载失败", error, () => renderPerformanceDetail(performanceId, query));
+      renderError("购票信息加载失败", error, () => renderPerformancePurchase(performanceId, query));
     }
   }
 
-  function renderDetailFromState() {
+  function renderPurchaseFromState() {
     const data = state.currentDetail;
     if (!data) return;
     const { detail, showId, availability, seatMap, seats } = data;
@@ -549,6 +590,7 @@
             <div class="detail-copy">
               <div class="button-row">
                 <a class="btn ghost compact" href="#/">返回项目</a>
+                <a class="btn compact" href="#/performance/${normalizeId(detail.performanceId)}">项目详情</a>
                 <span class="pill ok">${typeText(detail.performanceType)}</span>
               </div>
               <h1>${escapeHtml(detail.title)}</h1>
@@ -702,7 +744,7 @@
     document.querySelectorAll("[data-show-id]").forEach((button) => {
       button.addEventListener("click", () => {
         const performanceId = state.currentDetail.detail.performanceId;
-        window.location.hash = `#/performance/${performanceId}?showId=${button.dataset.showId}`;
+        window.location.hash = `#/performance/${performanceId}/purchase?showId=${button.dataset.showId}`;
       });
     });
     document.querySelectorAll("[data-category-id]").forEach((button) => {
@@ -712,7 +754,7 @@
         selection.categoryId = normalizeId(button.dataset.categoryId);
         selection.selectedSeats = [];
         selection.quantity = 1;
-        renderDetailFromState();
+        renderPurchaseFromState();
       });
     });
     document.querySelectorAll("[data-seat-id]").forEach((button) => {
@@ -727,7 +769,7 @@
         } else {
           toast(`单笔最多选择 ${MAX_QUANTITY} 个座位`, "error");
         }
-        renderDetailFromState();
+        renderPurchaseFromState();
       });
     });
     document.querySelectorAll("[data-quantity]").forEach((button) => {
@@ -735,7 +777,7 @@
         const showId = state.currentDetail.showId;
         const selection = ensureSelection(showId, state.currentDetail.availability);
         selection.quantity = clamp(Number(selection.quantity || 1) + Number(button.dataset.quantity), 1, MAX_QUANTITY);
-        renderDetailFromState();
+        renderPurchaseFromState();
       });
     });
     const quantity = document.querySelector("#quantity");
@@ -744,7 +786,7 @@
         const showId = state.currentDetail.showId;
         const selection = ensureSelection(showId, state.currentDetail.availability);
         selection.quantity = clamp(Number(quantity.value || 1), 1, MAX_QUANTITY);
-        renderDetailFromState();
+        renderPurchaseFromState();
       });
     }
     const refresh = document.querySelector("[data-refresh-seats]");
@@ -755,6 +797,1074 @@
     if (create) {
       create.addEventListener("click", createOrderFromSelection);
     }
+  }
+
+  function commentPanelTemplate(performanceId) {
+    return `
+      <section class="panel comment-panel" data-comment-panel data-performance-id="${escapeAttr(normalizeId(performanceId))}">
+        ${inlineEmpty("正在加载评论区", "请稍候。")}
+      </section>
+    `;
+  }
+
+  function createCommentPanelState(performanceId) {
+    return {
+      performanceId: normalizeId(performanceId),
+      activeTab: "messages",
+      loaded: false,
+      loading: false,
+      authRequired: false,
+      error: "",
+      busy: false,
+      messageDraft: "",
+      editingMessageId: "",
+      editingReplyId: "",
+      replyDrafts: {},
+      replyLoading: {},
+      messages: {
+        records: [],
+        nextCursor: "",
+        hasMore: false,
+        loading: false,
+        error: ""
+      },
+      summary: null,
+      myReview: null,
+      editingReview: false,
+      reviewDraft: {
+        rating: 5,
+        content: ""
+      },
+      reviews: {
+        records: [],
+        current: 1,
+        size: 5,
+        total: 0,
+        rating: "",
+        loading: false,
+        error: ""
+      }
+    };
+  }
+
+  function mountCommentPanel(performanceId) {
+    const id = normalizeId(performanceId);
+    const container = document.querySelector("[data-comment-panel]");
+    if (!container || !id) {
+      return;
+    }
+    if (!state.commentPanel || state.commentPanel.performanceId !== id) {
+      state.commentPanel = createCommentPanelState(id);
+    }
+    renderCommentPanel();
+    if (!state.commentPanel.loaded && !state.commentPanel.loading) {
+      loadCommentPanel(id);
+    }
+  }
+
+  async function loadCommentPanel(performanceId) {
+    const panel = state.commentPanel;
+    const id = normalizeId(performanceId);
+    if (!panel || panel.performanceId !== id) {
+      return;
+    }
+    if (!hasCommentAuth()) {
+      panel.loading = false;
+      panel.loaded = false;
+      panel.authRequired = true;
+      renderCommentPanel();
+      return;
+    }
+    panel.loading = true;
+    panel.authRequired = false;
+    panel.error = "";
+    panel.messages.error = "";
+    panel.reviews.error = "";
+    renderCommentPanel();
+    try {
+      const [messages, summary, reviews, myReview] = await Promise.all([
+        fetchCommentMessages(id, "", 20),
+        apiGet(`/api/comment/performances/${encodeURIComponent(id)}/rating-summary`),
+        fetchCommentReviews(id, panel.reviews.current, panel.reviews.size, panel.reviews.rating),
+        apiGet(`/api/comment/performances/${encodeURIComponent(id)}/reviews/me`).catch((error) => {
+          if (isAuthError(error)) {
+            throw error;
+          }
+          return null;
+        })
+      ]);
+      if (!state.commentPanel || state.commentPanel.performanceId !== id) {
+        return;
+      }
+      panel.messages.records = Array.isArray(messages?.records) ? messages.records : [];
+      panel.messages.nextCursor = normalizeId(messages?.nextCursor);
+      panel.messages.hasMore = Boolean(messages?.hasMore);
+      panel.summary = summary || null;
+      panel.myReview = myReview || null;
+      panel.reviews.records = Array.isArray(reviews?.records) ? reviews.records : [];
+      panel.reviews.current = Number(reviews?.current || panel.reviews.current || 1);
+      panel.reviews.size = Number(reviews?.size || panel.reviews.size || 5);
+      panel.reviews.total = Number(reviews?.total || 0);
+      panel.loaded = true;
+      panel.authRequired = false;
+    } catch (error) {
+      if (isAuthError(error)) {
+        panel.authRequired = true;
+        panel.loaded = false;
+      } else {
+        panel.error = apiMessage(error);
+      }
+    } finally {
+      panel.loading = false;
+      renderCommentPanel();
+    }
+  }
+
+  function renderCommentPanel() {
+    const panel = state.commentPanel;
+    const container = document.querySelector("[data-comment-panel]");
+    if (!container || !panel) {
+      return;
+    }
+    if (!hasCommentAuth() || panel.authRequired) {
+      container.innerHTML = `
+        ${commentPanelHeader(panel)}
+        ${inlineEmpty("请先登录", "登录后可以查看评论区、发送聊天消息，并在购买后发布项目评价。")}
+        <div class="button-row">
+          <button class="btn primary" type="button" data-comment-login>登录</button>
+        </div>
+      `;
+      bindCommentPanelEvents();
+      return;
+    }
+    if (panel.loading && !panel.loaded) {
+      container.innerHTML = `
+        ${commentPanelHeader(panel)}
+        <div class="comment-skeleton">
+          <div class="skeleton" style="width: 84%"></div>
+          <div class="skeleton" style="width: 66%"></div>
+          <div class="skeleton" style="width: 92%"></div>
+        </div>
+      `;
+      return;
+    }
+    if (panel.error) {
+      container.innerHTML = `
+        ${commentPanelHeader(panel)}
+        <p class="form-error">${escapeHtml(panel.error)}</p>
+        <div class="button-row">
+          <button class="btn primary" type="button" data-comment-retry>重试</button>
+        </div>
+      `;
+      bindCommentPanelEvents();
+      return;
+    }
+    container.innerHTML = `
+      ${commentPanelHeader(panel)}
+      ${commentTabsTemplate(panel)}
+      <div class="comment-tab-body">
+        ${panel.activeTab === "reviews" ? commentReviewsTemplate(panel) : commentMessagesTemplate(panel)}
+      </div>
+    `;
+    bindCommentPanelEvents();
+  }
+
+  function commentPanelHeader(panel) {
+    const summary = panel.summary;
+    const count = Number(summary?.reviewCount || 0);
+    const avg = formatRating(summary?.avgRating);
+    return `
+      <div class="comment-head">
+        <div>
+          <h2>项目评论区</h2>
+          <p class="muted">聊天对所有登录用户开放，项目评价仅限已购买用户发布。</p>
+        </div>
+        <div class="comment-score" aria-label="项目评分">
+          <strong>${avg}</strong>
+          <span>${commentStars(summary?.avgRating)}</span>
+          <small>${count} 条评价</small>
+        </div>
+      </div>
+    `;
+  }
+
+  function commentTabsTemplate(panel) {
+    return `
+      <div class="comment-tabs" role="tablist" aria-label="评论区内容">
+        <button type="button" data-comment-tab="messages" class="${panel.activeTab === "messages" ? "active" : ""}">聊天</button>
+        <button type="button" data-comment-tab="reviews" class="${panel.activeTab === "reviews" ? "active" : ""}">评价</button>
+      </div>
+    `;
+  }
+
+  function commentMessagesTemplate(panel) {
+    return `
+      <form class="comment-form" data-comment-message-form>
+        <div class="field">
+          <label for="comment-message-content">聊天消息</label>
+          <textarea id="comment-message-content" name="content" maxlength="1000" required placeholder="输入想和大家交流的内容">${escapeHtml(panel.messageDraft)}</textarea>
+        </div>
+        <div class="button-row">
+          <button class="btn primary" type="submit" ${panel.busy ? "disabled" : ""}>发送</button>
+          <span class="muted">最多 1000 字</span>
+        </div>
+      </form>
+      ${panel.messages.error ? `<p class="form-error">${escapeHtml(panel.messages.error)}</p>` : ""}
+      <div class="comment-list">
+        ${panel.messages.records.length ? panel.messages.records.map((message) => commentMessageCard(message, panel)).join("") : inlineEmpty("暂无聊天", "还没有用户发送聊天消息。")}
+      </div>
+      <div class="button-row">
+        ${panel.messages.hasMore ? `<button class="btn" type="button" data-comment-load-messages ${panel.messages.loading ? "disabled" : ""}>${panel.messages.loading ? "加载中" : "加载更多"}</button>` : ""}
+      </div>
+    `;
+  }
+
+  function commentMessageCard(message, panel) {
+    const messageId = normalizeId(message.messageId);
+    const mine = sameId(message.userId, currentUserId());
+    const editing = sameId(messageId, panel.editingMessageId);
+    if (editing) {
+      return `
+        <article class="comment-card">
+          <form class="comment-form compact-form" data-comment-message-edit-form data-message-id="${escapeAttr(messageId)}">
+            <div class="field">
+              <label for="message-edit-${escapeAttr(messageId)}">编辑聊天消息</label>
+              <textarea id="message-edit-${escapeAttr(messageId)}" name="content" maxlength="1000" required>${escapeHtml(message.content || "")}</textarea>
+            </div>
+            <div class="button-row">
+              <button class="btn primary compact" type="submit" ${panel.busy ? "disabled" : ""}>保存</button>
+              <button class="btn compact" type="button" data-comment-cancel-message-edit>取消</button>
+            </div>
+          </form>
+        </article>
+      `;
+    }
+    return `
+      <article class="comment-card">
+        <div class="comment-card-head">
+          <div>
+            <strong>${escapeHtml(commentAuthorLabel(message))}</strong>
+            <span class="muted">${formatDateTime(message.createTime)}</span>
+            ${Number(message.editCount || 0) > 0 ? `<span class="pill">已编辑</span>` : ""}
+          </div>
+          ${mine ? `
+            <div class="button-row">
+              <button class="btn compact" type="button" data-comment-edit-message="${escapeAttr(messageId)}">编辑</button>
+              <button class="btn danger compact" type="button" data-comment-delete-message="${escapeAttr(messageId)}">删除</button>
+            </div>
+          ` : ""}
+        </div>
+        <p class="comment-text">${escapeHtml(message.content || "")}</p>
+        ${commentRepliesTemplate(message, panel)}
+      </article>
+    `;
+  }
+
+  function commentRepliesTemplate(message, panel) {
+    const messageId = normalizeId(message.messageId);
+    const replyPage = ensureMessageReplies(message);
+    const replies = Array.isArray(replyPage.records) ? replyPage.records : [];
+    const replyCount = Number(message.replyCount || replies.length || 0);
+    const loading = Boolean(panel.replyLoading?.[messageId]);
+    const draft = panel.replyDrafts?.[messageId] || "";
+    return `
+      <section class="comment-replies" aria-label="聊天回复">
+        <div class="comment-reply-summary">
+          <span>${replyCount > 0 ? `${replyCount} 条回复` : "暂无回复"}</span>
+        </div>
+        ${replies.length ? `
+          <div class="comment-reply-list">
+            ${replies.map((reply) => commentReplyCard(reply, panel)).join("")}
+          </div>
+        ` : ""}
+        ${replyPage.hasMore ? `
+          <button class="btn compact" type="button" data-comment-load-replies="${escapeAttr(messageId)}" ${loading ? "disabled" : ""}>
+            ${loading ? "加载中" : "查看更多回复"}
+          </button>
+        ` : ""}
+        <form class="comment-reply-form" data-comment-reply-form data-message-id="${escapeAttr(messageId)}">
+          <textarea name="content" maxlength="1000" required placeholder="回复这条聊天">${escapeHtml(draft)}</textarea>
+          <div class="button-row">
+            <button class="btn primary compact" type="submit" ${panel.busy ? "disabled" : ""}>回复</button>
+            <span class="muted">最多 1000 字</span>
+          </div>
+        </form>
+      </section>
+    `;
+  }
+
+  function commentReplyCard(reply, panel) {
+    const replyId = normalizeId(reply.replyId);
+    const mine = sameId(reply.userId, currentUserId());
+    const editing = sameId(replyId, panel.editingReplyId);
+    if (editing) {
+      return `
+        <article class="comment-reply">
+          <form class="comment-form compact-form" data-comment-reply-edit-form data-reply-id="${escapeAttr(replyId)}">
+            <div class="field">
+              <label for="reply-edit-${escapeAttr(replyId)}">编辑回复</label>
+              <textarea id="reply-edit-${escapeAttr(replyId)}" name="content" maxlength="1000" required>${escapeHtml(reply.content || "")}</textarea>
+            </div>
+            <div class="button-row">
+              <button class="btn primary compact" type="submit" ${panel.busy ? "disabled" : ""}>保存</button>
+              <button class="btn compact" type="button" data-comment-cancel-reply-edit>取消</button>
+            </div>
+          </form>
+        </article>
+      `;
+    }
+    return `
+      <article class="comment-reply">
+        <div class="comment-reply-head">
+          <div>
+            <strong>${escapeHtml(commentAuthorLabel(reply))}</strong>
+            <span class="muted">${formatDateTime(reply.createTime)}</span>
+            ${Number(reply.editCount || 0) > 0 ? `<span class="pill">已编辑</span>` : ""}
+          </div>
+          ${mine ? `
+            <div class="button-row">
+              <button class="btn compact" type="button" data-comment-edit-reply="${escapeAttr(replyId)}">编辑</button>
+              <button class="btn danger compact" type="button" data-comment-delete-reply="${escapeAttr(replyId)}">删除</button>
+            </div>
+          ` : ""}
+        </div>
+        <p class="comment-text">${escapeHtml(reply.content || "")}</p>
+      </article>
+    `;
+  }
+
+  function commentReviewsTemplate(panel) {
+    return `
+      ${commentRatingSummaryTemplate(panel.summary, panel.reviews.rating)}
+      ${commentMyReviewTemplate(panel)}
+      ${panel.reviews.error ? `<p class="form-error">${escapeHtml(panel.reviews.error)}</p>` : ""}
+      <div class="comment-list">
+        ${panel.reviews.loading ? `<div class="skeleton" style="width: 76%"></div>` : ""}
+        ${panel.reviews.records.length ? panel.reviews.records.map((review) => commentReviewCard(review, panel)).join("") : inlineEmpty("暂无评价", "还没有用户发布项目评价。")}
+      </div>
+      ${commentReviewPagerTemplate(panel)}
+    `;
+  }
+
+  function commentRatingSummaryTemplate(summary, activeRating) {
+    const total = Number(summary?.reviewCount || 0);
+    const rows = [5, 4, 3, 2, 1].map((star) => {
+      const count = Number(summary?.[`star${star}Count`] || 0);
+      const percent = total > 0 ? Math.round((count / total) * 100) : 0;
+      return `
+        <button class="comment-rating-row ${Number(activeRating) === star ? "active" : ""}" type="button" data-comment-rating-filter="${star}">
+          <span>${star} 星</span>
+          <i><b style="width: ${percent}%"></b></i>
+          <strong>${count}</strong>
+        </button>
+      `;
+    }).join("");
+    return `
+      <div class="rating-summary">
+        <div class="rating-total">
+          <strong>${formatRating(summary?.avgRating)}</strong>
+          <span>${commentStars(summary?.avgRating)}</span>
+          <small>${total} 条评价</small>
+        </div>
+        <div class="rating-bars">
+          <button class="comment-rating-all ${activeRating ? "" : "active"}" type="button" data-comment-rating-filter="">全部评价</button>
+          ${rows}
+        </div>
+      </div>
+    `;
+  }
+
+  function commentMyReviewTemplate(panel) {
+    if (panel.myReview && !panel.editingReview) {
+      return `
+        <section class="my-review">
+          <div class="comment-card-head">
+            <div>
+              <h3>我的评价</h3>
+              <span>${commentStars(panel.myReview.rating)}</span>
+            </div>
+            <div class="button-row">
+              <button class="btn compact" type="button" data-comment-edit-review="${escapeAttr(normalizeId(panel.myReview.reviewId))}">编辑</button>
+              <button class="btn danger compact" type="button" data-comment-delete-review="${escapeAttr(normalizeId(panel.myReview.reviewId))}">删除</button>
+            </div>
+          </div>
+          <p class="comment-text">${escapeHtml(panel.myReview.content || "")}</p>
+          <p class="muted">发布于 ${formatDateTime(panel.myReview.createTime)}${Number(panel.myReview.editCount || 0) > 0 ? "，已编辑" : ""}</p>
+        </section>
+      `;
+    }
+    const rating = Number(panel.reviewDraft.rating || panel.myReview?.rating || 5);
+    const content = panel.reviewDraft.content || panel.myReview?.content || "";
+    return `
+      <form class="comment-form review-form" data-comment-review-form>
+        <div class="field">
+          <label>项目评分</label>
+          ${starPickerTemplate(rating)}
+        </div>
+        <div class="field">
+          <label for="comment-review-content">${panel.myReview ? "编辑评价" : "发布评价"}</label>
+          <textarea id="comment-review-content" name="content" maxlength="2000" required placeholder="分享购票、入场和观演体验">${escapeHtml(content)}</textarea>
+        </div>
+        <div class="button-row">
+          <button class="btn primary" type="submit" ${panel.busy ? "disabled" : ""}>${panel.myReview ? "保存评价" : "发布评价"}</button>
+          ${panel.myReview ? `<button class="btn" type="button" data-comment-cancel-review-edit>取消</button>` : ""}
+          <span class="muted">仅已购买用户可评价，最多 2000 字</span>
+        </div>
+      </form>
+    `;
+  }
+
+  function starPickerTemplate(selectedRating) {
+    const selected = clamp(Number(selectedRating || 5), 1, 5);
+    return `
+      <div class="star-picker" role="radiogroup" aria-label="项目评分">
+        ${[1, 2, 3, 4, 5].map((value) => `
+          <label class="${value <= selected ? "active" : ""}">
+            <input type="radio" name="rating" value="${value}" ${value === selected ? "checked" : ""}>
+            <span>★</span>
+          </label>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  function commentReviewCard(review) {
+    const reviewId = normalizeId(review.reviewId);
+    const mine = sameId(review.userId, currentUserId());
+    return `
+      <article class="comment-card">
+        <div class="comment-card-head">
+          <div>
+            <strong>${escapeHtml(commentAuthorLabel(review))}</strong>
+            <span>${commentStars(review.rating)}</span>
+            <span class="muted">${formatDateTime(review.createTime)}</span>
+            ${Number(review.editCount || 0) > 0 ? `<span class="pill">已编辑</span>` : ""}
+          </div>
+          ${mine ? `
+            <div class="button-row">
+              <button class="btn compact" type="button" data-comment-edit-review="${escapeAttr(reviewId)}">编辑</button>
+              <button class="btn danger compact" type="button" data-comment-delete-review="${escapeAttr(reviewId)}">删除</button>
+            </div>
+          ` : ""}
+        </div>
+        <p class="comment-text">${escapeHtml(review.content || "")}</p>
+      </article>
+    `;
+  }
+
+  function commentReviewPagerTemplate(panel) {
+    const current = Number(panel.reviews.current || 1);
+    const size = Number(panel.reviews.size || 5);
+    const total = Number(panel.reviews.total || 0);
+    const maxPage = Math.max(1, Math.ceil(total / size));
+    if (total <= size) {
+      return "";
+    }
+    return `
+      <div class="button-row">
+        <button class="btn" type="button" data-comment-review-page="${current - 1}" ${current <= 1 || panel.reviews.loading ? "disabled" : ""}>上一页</button>
+        <span class="muted">第 ${current} / ${maxPage} 页</span>
+        <button class="btn" type="button" data-comment-review-page="${current + 1}" ${current >= maxPage || panel.reviews.loading ? "disabled" : ""}>下一页</button>
+      </div>
+    `;
+  }
+
+  function bindCommentPanelEvents() {
+    const root = document.querySelector("[data-comment-panel]");
+    const panel = state.commentPanel;
+    if (!root || !panel) {
+      return;
+    }
+    root.querySelector("[data-comment-login]")?.addEventListener("click", () => openAuthDialog("login"));
+    root.querySelector("[data-comment-retry]")?.addEventListener("click", () => loadCommentPanel(panel.performanceId));
+    root.querySelectorAll("[data-comment-tab]").forEach((button) => {
+      button.addEventListener("click", () => {
+        panel.activeTab = button.dataset.commentTab || "messages";
+        renderCommentPanel();
+      });
+    });
+    bindCommentMessageEvents(root, panel);
+    bindCommentReviewEvents(root, panel);
+  }
+
+  function bindCommentMessageEvents(root, panel) {
+    const messageInput = root.querySelector("[data-comment-message-form] textarea[name='content']");
+    messageInput?.addEventListener("input", () => {
+      panel.messageDraft = messageInput.value;
+    });
+    root.querySelector("[data-comment-message-form]")?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await submitCommentMessage(event.target);
+    });
+    root.querySelectorAll("[data-comment-edit-message]").forEach((button) => {
+      button.addEventListener("click", () => {
+        panel.editingMessageId = normalizeId(button.dataset.commentEditMessage);
+        renderCommentPanel();
+      });
+    });
+    root.querySelector("[data-comment-cancel-message-edit]")?.addEventListener("click", () => {
+      panel.editingMessageId = "";
+      renderCommentPanel();
+    });
+    root.querySelectorAll("[data-comment-message-edit-form]").forEach((form) => {
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        await submitCommentMessageEdit(event.target);
+      });
+    });
+    root.querySelectorAll("[data-comment-delete-message]").forEach((button) => {
+      button.addEventListener("click", () => deleteCommentMessage(button.dataset.commentDeleteMessage));
+    });
+    root.querySelectorAll("[data-comment-reply-form]").forEach((form) => {
+      const textarea = form.querySelector("textarea[name='content']");
+      textarea?.addEventListener("input", () => {
+        const messageId = normalizeId(form.dataset.messageId);
+        if (messageId) {
+          panel.replyDrafts[messageId] = textarea.value;
+        }
+      });
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        await submitCommentReply(event.target);
+      });
+    });
+    root.querySelectorAll("[data-comment-load-replies]").forEach((button) => {
+      button.addEventListener("click", () => loadCommentReplies(button.dataset.commentLoadReplies, true));
+    });
+    root.querySelectorAll("[data-comment-edit-reply]").forEach((button) => {
+      button.addEventListener("click", () => {
+        panel.editingReplyId = normalizeId(button.dataset.commentEditReply);
+        renderCommentPanel();
+      });
+    });
+    root.querySelector("[data-comment-cancel-reply-edit]")?.addEventListener("click", () => {
+      panel.editingReplyId = "";
+      renderCommentPanel();
+    });
+    root.querySelectorAll("[data-comment-reply-edit-form]").forEach((form) => {
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        await submitCommentReplyEdit(event.target);
+      });
+    });
+    root.querySelectorAll("[data-comment-delete-reply]").forEach((button) => {
+      button.addEventListener("click", () => deleteCommentReply(button.dataset.commentDeleteReply));
+    });
+    root.querySelector("[data-comment-load-messages]")?.addEventListener("click", () => loadCommentMessages(true));
+  }
+
+  function bindCommentReviewEvents(root, panel) {
+    root.querySelectorAll(".star-picker input[name='rating']").forEach((input) => {
+      input.addEventListener("change", () => {
+        panel.reviewDraft.rating = Number(input.value || 5);
+        updateStarPicker(root, panel.reviewDraft.rating);
+      });
+    });
+    const reviewInput = root.querySelector("[data-comment-review-form] textarea[name='content']");
+    reviewInput?.addEventListener("input", () => {
+      panel.reviewDraft.content = reviewInput.value;
+    });
+    root.querySelector("[data-comment-review-form]")?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await submitCommentReview(event.target);
+    });
+    root.querySelectorAll("[data-comment-edit-review]").forEach((button) => {
+      button.addEventListener("click", () => {
+        if (panel.myReview && sameId(panel.myReview.reviewId, button.dataset.commentEditReview)) {
+          panel.reviewDraft = {
+            rating: Number(panel.myReview.rating || 5),
+            content: panel.myReview.content || ""
+          };
+        }
+        panel.editingReview = true;
+        panel.activeTab = "reviews";
+        renderCommentPanel();
+      });
+    });
+    root.querySelector("[data-comment-cancel-review-edit]")?.addEventListener("click", () => {
+      panel.editingReview = false;
+      panel.reviewDraft = { rating: 5, content: "" };
+      renderCommentPanel();
+    });
+    root.querySelectorAll("[data-comment-delete-review]").forEach((button) => {
+      button.addEventListener("click", () => deleteCommentReview(button.dataset.commentDeleteReview));
+    });
+    root.querySelectorAll("[data-comment-rating-filter]").forEach((button) => {
+      button.addEventListener("click", () => loadCommentReviews(1, button.dataset.commentRatingFilter || ""));
+    });
+    root.querySelectorAll("[data-comment-review-page]").forEach((button) => {
+      button.addEventListener("click", () => loadCommentReviews(Number(button.dataset.commentReviewPage || 1), panel.reviews.rating));
+    });
+  }
+
+  async function submitCommentMessage(form) {
+    const panel = state.commentPanel;
+    if (!panel || !ensureCommentAuth()) {
+      return;
+    }
+    const content = textField(form, "content");
+    if (!content) {
+      toast("请输入聊天内容", "error");
+      return;
+    }
+    panel.busy = true;
+    renderCommentPanel();
+    try {
+      await apiPost(`/api/comment/performances/${encodeURIComponent(panel.performanceId)}/messages`, { content });
+      panel.messageDraft = "";
+      await loadCommentMessages(false);
+      toast("聊天消息已发送", "success");
+    } catch (error) {
+      handleCommentError(error, panel.messages);
+    } finally {
+      panel.busy = false;
+      renderCommentPanel();
+    }
+  }
+
+  async function submitCommentMessageEdit(form) {
+    const panel = state.commentPanel;
+    if (!panel || !ensureCommentAuth()) {
+      return;
+    }
+    const messageId = normalizeId(form.dataset.messageId);
+    const content = textField(form, "content");
+    if (!messageId || !content) {
+      toast("请输入聊天内容", "error");
+      return;
+    }
+    panel.busy = true;
+    renderCommentPanel();
+    try {
+      await apiPut(`/api/comment/messages/${encodeURIComponent(messageId)}`, { content });
+      panel.editingMessageId = "";
+      await loadCommentMessages(false);
+      toast("聊天消息已更新", "success");
+    } catch (error) {
+      handleCommentError(error, panel.messages);
+    } finally {
+      panel.busy = false;
+      renderCommentPanel();
+    }
+  }
+
+  async function deleteCommentMessage(messageId) {
+    const panel = state.commentPanel;
+    const id = normalizeId(messageId);
+    if (!panel || !id || !ensureCommentAuth()) {
+      return;
+    }
+    if (!window.confirm("确认删除这条聊天消息？")) {
+      return;
+    }
+    panel.busy = true;
+    renderCommentPanel();
+    try {
+      await apiDelete(`/api/comment/messages/${encodeURIComponent(id)}`);
+      await loadCommentMessages(false);
+      toast("聊天消息已删除", "success");
+    } catch (error) {
+      handleCommentError(error, panel.messages);
+    } finally {
+      panel.busy = false;
+      renderCommentPanel();
+    }
+  }
+
+  async function submitCommentReply(form) {
+    const panel = state.commentPanel;
+    if (!panel || !ensureCommentAuth()) {
+      return;
+    }
+    const messageId = normalizeId(form.dataset.messageId);
+    const content = textField(form, "content");
+    if (!messageId || !content) {
+      toast("请输入回复内容", "error");
+      return;
+    }
+    panel.replyDrafts[messageId] = content;
+    panel.busy = true;
+    renderCommentPanel();
+    try {
+      const reply = await apiPost(`/api/comment/messages/${encodeURIComponent(messageId)}/replies`, { content });
+      panel.replyDrafts[messageId] = "";
+      upsertCommentReply(messageId, reply, true);
+      toast("回复已发送", "success");
+    } catch (error) {
+      handleCommentError(error, panel.messages);
+    } finally {
+      panel.busy = false;
+      renderCommentPanel();
+    }
+  }
+
+  async function submitCommentReplyEdit(form) {
+    const panel = state.commentPanel;
+    if (!panel || !ensureCommentAuth()) {
+      return;
+    }
+    const replyId = normalizeId(form.dataset.replyId);
+    const content = textField(form, "content");
+    if (!replyId || !content) {
+      toast("请输入回复内容", "error");
+      return;
+    }
+    panel.busy = true;
+    renderCommentPanel();
+    try {
+      const reply = await apiPut(`/api/comment/replies/${encodeURIComponent(replyId)}`, { content });
+      const messageId = normalizeId(reply?.messageId) || findMessageIdByReplyId(replyId);
+      if (messageId) {
+        upsertCommentReply(messageId, reply, false);
+      }
+      panel.editingReplyId = "";
+      toast("回复已更新", "success");
+    } catch (error) {
+      handleCommentError(error, panel.messages);
+    } finally {
+      panel.busy = false;
+      renderCommentPanel();
+    }
+  }
+
+  async function deleteCommentReply(replyId) {
+    const panel = state.commentPanel;
+    const id = normalizeId(replyId);
+    if (!panel || !id || !ensureCommentAuth()) {
+      return;
+    }
+    if (!window.confirm("确认删除这条回复？")) {
+      return;
+    }
+    panel.busy = true;
+    renderCommentPanel();
+    try {
+      await apiDelete(`/api/comment/replies/${encodeURIComponent(id)}`);
+      removeCommentReply(id);
+      toast("回复已删除", "success");
+    } catch (error) {
+      handleCommentError(error, panel.messages);
+    } finally {
+      panel.busy = false;
+      renderCommentPanel();
+    }
+  }
+
+  async function submitCommentReview(form) {
+    const panel = state.commentPanel;
+    if (!panel || !ensureCommentAuth()) {
+      return;
+    }
+    const data = new FormData(form);
+    const rating = clamp(Number(data.get("rating") || panel.reviewDraft.rating || 5), 1, 5);
+    const content = textField(form, "content");
+    if (!content) {
+      toast("请输入评价内容", "error");
+      return;
+    }
+    panel.busy = true;
+    renderCommentPanel();
+    try {
+      if (panel.myReview) {
+        await apiPut(`/api/comment/reviews/${encodeURIComponent(normalizeId(panel.myReview.reviewId))}`, { rating, content });
+        toast("项目评价已更新", "success");
+      } else {
+        await apiPost(`/api/comment/performances/${encodeURIComponent(panel.performanceId)}/reviews`, { rating, content });
+        toast("项目评价已发布", "success");
+      }
+      panel.editingReview = false;
+      panel.reviewDraft = { rating: 5, content: "" };
+      panel.reviews.current = 1;
+      panel.reviews.rating = "";
+      panel.loaded = false;
+      await loadCommentPanel(panel.performanceId);
+    } catch (error) {
+      handleCommentError(error, panel.reviews);
+    } finally {
+      panel.busy = false;
+      renderCommentPanel();
+    }
+  }
+
+  async function deleteCommentReview(reviewId) {
+    const panel = state.commentPanel;
+    const id = normalizeId(reviewId);
+    if (!panel || !id || !ensureCommentAuth()) {
+      return;
+    }
+    if (!window.confirm("确认删除这条项目评价？")) {
+      return;
+    }
+    panel.busy = true;
+    renderCommentPanel();
+    try {
+      await apiDelete(`/api/comment/reviews/${encodeURIComponent(id)}`);
+      panel.editingReview = false;
+      panel.reviewDraft = { rating: 5, content: "" };
+      panel.reviews.current = 1;
+      panel.loaded = false;
+      await loadCommentPanel(panel.performanceId);
+      toast("项目评价已删除", "success");
+    } catch (error) {
+      handleCommentError(error, panel.reviews);
+    } finally {
+      panel.busy = false;
+      renderCommentPanel();
+    }
+  }
+
+  async function loadCommentMessages(append) {
+    const panel = state.commentPanel;
+    if (!panel || !ensureCommentAuth()) {
+      return;
+    }
+    panel.messages.loading = true;
+    panel.messages.error = "";
+    renderCommentPanel();
+    try {
+      const page = await fetchCommentMessages(panel.performanceId, append ? panel.messages.nextCursor : "", 20);
+      const records = Array.isArray(page?.records) ? page.records : [];
+      panel.messages.records = append ? mergeById(panel.messages.records, records, "messageId") : records;
+      panel.messages.nextCursor = normalizeId(page?.nextCursor);
+      panel.messages.hasMore = Boolean(page?.hasMore);
+      panel.loaded = true;
+    } catch (error) {
+      handleCommentError(error, panel.messages);
+    } finally {
+      panel.messages.loading = false;
+      renderCommentPanel();
+    }
+  }
+
+  async function loadCommentReplies(messageId, append) {
+    const panel = state.commentPanel;
+    const id = normalizeId(messageId);
+    const message = findCommentMessage(id);
+    if (!panel || !id || !message || !ensureCommentAuth()) {
+      return;
+    }
+    const replyPage = ensureMessageReplies(message);
+    panel.replyLoading[id] = true;
+    panel.messages.error = "";
+    renderCommentPanel();
+    try {
+      const page = await fetchCommentReplies(id, append ? replyPage.nextCursor : "", append ? 10 : 3);
+      const records = Array.isArray(page?.records) ? page.records : [];
+      replyPage.records = append ? mergeById(replyPage.records, records, "replyId") : records;
+      replyPage.records = sortByIdField(replyPage.records, "replyId");
+      replyPage.nextCursor = normalizeId(page?.nextCursor);
+      replyPage.hasMore = Boolean(page?.hasMore);
+      if (!message.replyCount) {
+        message.replyCount = replyPage.records.length;
+      }
+    } catch (error) {
+      handleCommentError(error, panel.messages);
+    } finally {
+      panel.replyLoading[id] = false;
+      renderCommentPanel();
+    }
+  }
+
+  async function loadCommentReviews(current, rating) {
+    const panel = state.commentPanel;
+    if (!panel || !ensureCommentAuth()) {
+      return;
+    }
+    panel.reviews.current = Math.max(1, Number(current || 1));
+    panel.reviews.rating = normalizeRatingFilter(rating);
+    panel.reviews.loading = true;
+    panel.reviews.error = "";
+    renderCommentPanel();
+    try {
+      const page = await fetchCommentReviews(panel.performanceId, panel.reviews.current, panel.reviews.size, panel.reviews.rating);
+      panel.reviews.records = Array.isArray(page?.records) ? page.records : [];
+      panel.reviews.current = Number(page?.current || panel.reviews.current);
+      panel.reviews.size = Number(page?.size || panel.reviews.size);
+      panel.reviews.total = Number(page?.total || 0);
+      panel.loaded = true;
+    } catch (error) {
+      handleCommentError(error, panel.reviews);
+    } finally {
+      panel.reviews.loading = false;
+      renderCommentPanel();
+    }
+  }
+
+  function fetchCommentMessages(performanceId, cursor, size) {
+    const params = new URLSearchParams();
+    if (cursor) {
+      params.set("cursor", cursor);
+    }
+    params.set("size", String(size || 20));
+    return apiGet(`/api/comment/performances/${encodeURIComponent(normalizeId(performanceId))}/messages?${params.toString()}`);
+  }
+
+  function fetchCommentReplies(messageId, cursor, size) {
+    const params = new URLSearchParams();
+    if (cursor) {
+      params.set("cursor", cursor);
+    }
+    params.set("size", String(size || 10));
+    return apiGet(`/api/comment/messages/${encodeURIComponent(normalizeId(messageId))}/replies?${params.toString()}`);
+  }
+
+  function fetchCommentReviews(performanceId, current, size, rating) {
+    const params = new URLSearchParams();
+    params.set("current", String(current || 1));
+    params.set("size", String(size || 5));
+    const ratingFilter = normalizeRatingFilter(rating);
+    if (ratingFilter) {
+      params.set("rating", ratingFilter);
+    }
+    return apiGet(`/api/comment/performances/${encodeURIComponent(normalizeId(performanceId))}/reviews?${params.toString()}`);
+  }
+
+  function ensureMessageReplies(message) {
+    if (!message.replies || typeof message.replies !== "object") {
+      message.replies = { records: [], nextCursor: "", hasMore: false };
+    }
+    if (!Array.isArray(message.replies.records)) {
+      message.replies.records = [];
+    }
+    message.replies.nextCursor = normalizeId(message.replies.nextCursor);
+    message.replies.hasMore = Boolean(message.replies.hasMore);
+    return message.replies;
+  }
+
+  function findCommentMessage(messageId) {
+    const panel = state.commentPanel;
+    const id = normalizeId(messageId);
+    if (!panel || !id) {
+      return null;
+    }
+    return (panel.messages.records || []).find((message) => sameId(message.messageId, id)) || null;
+  }
+
+  function findMessageIdByReplyId(replyId) {
+    const panel = state.commentPanel;
+    const id = normalizeId(replyId);
+    if (!panel || !id) {
+      return "";
+    }
+    for (const message of panel.messages.records || []) {
+      const replyPage = ensureMessageReplies(message);
+      if (replyPage.records.some((reply) => sameId(reply.replyId, id))) {
+        return normalizeId(message.messageId);
+      }
+    }
+    return "";
+  }
+
+  function upsertCommentReply(messageId, reply, incrementCount) {
+    const message = findCommentMessage(messageId);
+    if (!message || !reply) {
+      return;
+    }
+    const replyPage = ensureMessageReplies(message);
+    const existing = replyPage.records.some((item) => sameId(item.replyId, reply.replyId));
+    replyPage.records = sortByIdField(mergeById(replyPage.records, [reply], "replyId"), "replyId");
+    if (incrementCount && !existing) {
+      message.replyCount = Number(message.replyCount || 0) + 1;
+    }
+  }
+
+  function removeCommentReply(replyId) {
+    const panel = state.commentPanel;
+    const id = normalizeId(replyId);
+    if (!panel || !id) {
+      return;
+    }
+    for (const message of panel.messages.records || []) {
+      const replyPage = ensureMessageReplies(message);
+      const before = replyPage.records.length;
+      replyPage.records = replyPage.records.filter((reply) => !sameId(reply.replyId, id));
+      if (replyPage.records.length !== before) {
+        message.replyCount = Math.max(0, Number(message.replyCount || before) - 1);
+        if (sameId(panel.editingReplyId, id)) {
+          panel.editingReplyId = "";
+        }
+        return;
+      }
+    }
+  }
+
+  function sortByIdField(records, idField) {
+    return [...(records || [])].sort((left, right) => compareIds(left?.[idField], right?.[idField]));
+  }
+
+  function ensureCommentAuth() {
+    if (hasCommentAuth()) {
+      return true;
+    }
+    openAuthDialog("login");
+    return false;
+  }
+
+  function hasCommentAuth() {
+    return Boolean(state.token && currentUserId());
+  }
+
+  function handleCommentError(error, target) {
+    const panel = state.commentPanel;
+    if (isAuthError(error)) {
+      if (panel) {
+        panel.authRequired = true;
+      }
+      openAuthDialog("login");
+      return;
+    }
+    if (target) {
+      target.error = apiMessage(error);
+    } else if (panel) {
+      panel.error = apiMessage(error);
+    }
+    toast(apiMessage(error), "error");
+  }
+
+  function isAuthError(error) {
+    return /401|403|Unauthorized|Forbidden|token|auth|login/i.test(apiMessage(error));
+  }
+
+  function mergeById(existing, incoming, idField) {
+    const map = new Map();
+    [...(existing || []), ...(incoming || [])].forEach((item) => {
+      const id = normalizeId(item?.[idField]);
+      if (id) {
+        map.set(id, item);
+      }
+    });
+    return [...map.values()];
+  }
+
+  function normalizeRatingFilter(value) {
+    const number = Number(value || 0);
+    return number >= 1 && number <= 5 ? String(number) : "";
+  }
+
+  function updateStarPicker(root, rating) {
+    const selected = clamp(Number(rating || 5), 1, 5);
+    root.querySelectorAll(".star-picker label").forEach((label) => {
+      const value = Number(label.querySelector("input")?.value || 0);
+      label.classList.toggle("active", value <= selected);
+    });
+  }
+
+  function commentAuthorLabel(item) {
+    const userId = normalizeId(item?.userId);
+    if (sameId(userId, currentUserId())) {
+      return "我";
+    }
+    return userId ? `用户 #${userId}` : "用户";
+  }
+
+  function commentStars(value) {
+    const rating = clamp(Math.round(Number(value || 0)), 0, 5);
+    return `<span class="comment-stars" aria-label="${rating} 星">${"★".repeat(rating)}${"☆".repeat(5 - rating)}</span>`;
+  }
+
+  function formatRating(value) {
+    const rating = Number(value || 0);
+    return Number.isFinite(rating) ? rating.toFixed(1) : "0.0";
   }
 
   async function refreshCurrentSeats() {
@@ -768,7 +1878,7 @@
       state.currentDetail.availability = availability;
       state.currentDetail.seats = seats;
       pruneUnavailableSeats();
-      renderDetailFromState();
+      renderPurchaseFromState();
       toast("座位状态已刷新", "success");
     } catch (error) {
       toast(apiMessage(error), "error");
@@ -798,7 +1908,7 @@
       return;
     }
     state.busy = true;
-      renderDetailFromState();
+    renderPurchaseFromState();
     try {
       const payload = {
         showId: normalizeId(data.showId),
@@ -829,8 +1939,8 @@
       await refreshCurrentSeats();
     } finally {
       state.busy = false;
-      if (location.hash.startsWith("#/performance/")) {
-        renderDetailFromState();
+      if (location.hash.startsWith("#/performance/") && location.hash.includes("/purchase")) {
+        renderPurchaseFromState();
       }
     }
   }
@@ -2167,7 +3277,7 @@
         seats: Array.isArray(seats) ? seats : [],
         filter: {
           keyword: "",
-          areaName: "",
+          areaId: "",
           status: ""
         }
       };
@@ -2191,7 +3301,7 @@
     const venueId = normalizeId(manager.venue?.venueId);
     const seats = Array.isArray(manager.seats) ? manager.seats : [];
     const records = filterAdminVenueSeats(seats, manager.filter);
-    const areas = [...new Set(seats.map((seat) => seat.areaName).filter(Boolean))].sort((left, right) => left.localeCompare(right, "zh-CN"));
+    const areas = [...new Set(seats.map((seat) => String(seat.areaId || "")).filter(Boolean))].sort((left, right) => left.localeCompare(right, "zh-CN"));
     return `
       <div class="admin-detail">
         <div class="management-top">
@@ -2208,9 +3318,9 @@
           </div>
           <div class="field">
             <label for="admin-seat-area">座位区域</label>
-            <select id="admin-seat-area" name="areaName">
-              ${option("", "全部区域", manager.filter.areaName)}
-              ${areas.map((area) => option(area, area, manager.filter.areaName)).join("")}
+            <select id="admin-seat-area" name="areaId">
+              ${option("", "全部区域", manager.filter.areaId)}
+              ${areas.map((area) => option(area, area, manager.filter.areaId)).join("")}
             </select>
           </div>
           <div class="field">
@@ -2277,7 +3387,7 @@
     const classNames = ["seat"];
     if (Number(seat.status) !== 1) classNames.push("sold");
     if (!inFilter) classNames.push("filtered");
-    const label = `${seat.seatNo || seatId} · ${seat.areaName || "-"} · ${seat.rowNo || "-"}行${seat.columnNo || "-"}列`;
+    const label = `${seat.seatNo || seatId} · ${String(seat.areaId || "-")} · ${seat.rowNo || "-"}行${seat.columnNo || "-"}列`;
     return `
       <button type="button" class="${classNames.join(" ")}" data-action="open-admin-venue-seat-form" data-venue-id="${escapeAttr(venueId)}" data-seat-id="${escapeAttr(seatId)}" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}">
         ${escapeHtml(shortSeatNo(seat.seatNo))}
@@ -2291,15 +3401,15 @@
 
   function filterAdminVenueSeats(seats, filter) {
     const keyword = String(filter?.keyword || "").trim().toLowerCase();
-    const areaName = String(filter?.areaName || "").trim();
+    const areaId = String(filter?.areaId || "").trim();
     const status = String(filter?.status || "").trim();
     return (seats || []).filter((seat) => {
-      const matchesArea = !areaName || seat.areaName === areaName;
+      const matchesArea = !areaId || String(seat.areaId || "") === areaId;
       const matchesStatus = !status || String(seat.status) === status;
       const matchesText = !keyword || [
         seat.seatId,
         seat.seatNo,
-        seat.areaName,
+        seat.areaId,
         seat.rowNo,
         seat.columnNo
       ].some((value) => String(value || "").toLowerCase().includes(keyword));
@@ -2310,7 +3420,7 @@
   function seatAreaSummary(seats) {
     const counts = new Map();
     (seats || []).forEach((seat) => {
-      const area = seat.areaName || "未分区";
+      const area = String(seat.areaId || "未分区");
       counts.set(area, (counts.get(area) || 0) + 1);
     });
     if (counts.size === 0) {
@@ -2328,7 +3438,7 @@
       event.preventDefault();
       state.adminSeatManager.filter = {
         keyword: textField(form, "keyword"),
-        areaName: String(new FormData(form).get("areaName") || ""),
+        areaId: String(new FormData(form).get("areaId") || ""),
         status: String(new FormData(form).get("status") || "")
       };
       renderAdminVenueSeatsDialog();
@@ -2336,7 +3446,7 @@
     dialogRoot.querySelector("[data-admin-seat-filter-reset]")?.addEventListener("click", () => {
       state.adminSeatManager.filter = {
         keyword: "",
-        areaName: "",
+        areaId: "",
         status: ""
       };
       renderAdminVenueSeatsDialog();
@@ -2362,7 +3472,7 @@
         seats: Array.isArray(seats) ? seats : [],
         filter: {
           keyword: "",
-          areaName: "",
+          areaId: "",
           status: ""
         }
       };
@@ -2388,7 +3498,7 @@
       </div>
     `;
     bindAdminVenueSeatForm(editing, resolvedVenueId, resolvedSeatId);
-    dialogRoot.querySelector("input[name='areaName']")?.focus();
+    dialogRoot.querySelector("input[name='areaId']")?.focus();
   }
 
   function adminVenueSeatFormTemplate(venueId, seat) {
@@ -2396,8 +3506,8 @@
     return `
       <form id="admin-seat-form" class="form-grid two-col">
         <div class="field two-col-span">
-          <label for="admin-seat-area-name">座位区域</label>
-          <input id="admin-seat-area-name" name="areaName" value="${escapeAttr(seat?.areaName || "")}" maxlength="64" required>
+          <label for="admin-seat-area-id">座位区域</label>
+          <input id="admin-seat-area-id" name="areaId" type="number" min="1" step="1" value="${escapeAttr(seat?.areaId || "")}" required>
         </div>
         <div class="field">
           <label for="admin-seat-row">排/行</label>
@@ -2460,13 +3570,12 @@
   }
 
   function validateAdminSeatForm(form) {
-    const areaName = textField(form, "areaName");
+    const areaId = Number(new FormData(form).get("areaId"));
     const rowNo = Number(new FormData(form).get("rowNo"));
     const columnNo = Number(new FormData(form).get("columnNo"));
     const seatNo = textField(form, "seatNo");
     const status = Number(new FormData(form).get("status"));
-    if (!areaName) return { valid: false, message: "请输入座位区域" };
-    if (areaName.length > 64) return { valid: false, message: "座位区域不能超过 64 个字符" };
+    if (!Number.isInteger(areaId) || areaId < 1) return { valid: false, message: "请输入有效的座位区域编号" };
     if (!Number.isInteger(rowNo) || rowNo < 1 || rowNo > 1000) return { valid: false, message: "排/行需要在 1 到 1000 之间" };
     if (!Number.isInteger(columnNo) || columnNo < 1 || columnNo > 1000) return { valid: false, message: "列需要在 1 到 1000 之间" };
     if (!seatNo) return { valid: false, message: "请输入座位号" };
@@ -2475,7 +3584,7 @@
     return {
       valid: true,
       data: {
-        areaName,
+        areaId,
         rowNo,
         columnNo,
         seatNo,
@@ -2948,7 +4057,7 @@
     if (assignedOther) classNames.push("other");
     if (!enabled) classNames.push("sold");
     const disabled = draft.readOnly || assignedOther || !enabled || (lockMode && !activeAssigned) ? "disabled" : "";
-    const label = `${seat.seatNo || seatId} ${seat.areaName || ""}${activeLocked ? " 已锁定" : ""}`;
+    const label = `${seat.seatNo || seatId} ${String(seat.areaId || "")}${activeLocked ? " 已锁定" : ""}`;
     return `
       <button type="button" class="${classNames.join(" ")}" data-ticket-seat="${escapeAttr(seatId)}" ${disabled} title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}" aria-pressed="${activeAssigned ? "true" : "false"}">
         ${escapeHtml(shortSeatNo(seat.seatNo))}
@@ -3779,6 +4888,7 @@
       refreshUser();
     }
     renderAuth();
+    renderCommentPanel();
   }
 
   async function logout() {
