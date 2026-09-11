@@ -51,7 +51,7 @@ public class OrderController {
     @OperationLog("order-create")
     @Operation(summary = "Create order", description = "Create a pending payment order after locking ticket inventory or seats.")
     @Idempotent(
-            key = "'order:create:' + #p0 + ':' + #p1.showId + ':' + #p1.categoryId + ':' + #p1.quantity + ':' + #p1.seatIds",
+            key = "'order:create:' + #p0 + ':' + #p1.showId + ':' + #p1.categoryId + ':' + #p1.areaId + ':' + #p1.allocationMode + ':' + #p1.quantity + ':' + #p1.seatIds",
             type = IdempotentTypeEnum.SPEL,
             keyTimeout = 10,
             message = "Order is being created, please do not submit repeatedly"
@@ -61,7 +61,7 @@ public class OrderController {
             @Parameter(description = "Current user id.", required = true)
             @RequestHeader(OrderConstants.USER_ID_HEADER) Long userId,
             @io.swagger.v3.oas.annotations.parameters.RequestBody(
-                    description = "Order creation request. showId, categoryId, and seatIds must belong to the same show session.",
+                    description = "Order creation request. showId, categoryId, areaId, allocationMode, and seatIds must belong to the same show session.",
                     required = true,
                     content = @Content(
                             schema = @Schema(implementation = OrderCreateReqDTO.class),
@@ -69,6 +69,10 @@ public class OrderController {
                                     @ExampleObject(
                                             name = "Concert VIP seat",
                                             value = "{\"showId\":2001,\"categoryId\":3001,\"quantity\":1,\"seatIds\":[400101]}"
+                                    ),
+                                    @ExampleObject(
+                                            name = "Concert auto allocation",
+                                            value = "{\"showId\":2001,\"categoryId\":3001,\"areaId\":40001,\"allocationMode\":\"AUTO\",\"quantity\":2}"
                                     ),
                                     @ExampleObject(
                                             name = "Drama standard seat",

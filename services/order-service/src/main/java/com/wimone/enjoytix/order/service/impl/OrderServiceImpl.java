@@ -16,10 +16,13 @@ import com.wimone.enjoytix.order.dto.req.OrderRefundRollbackReqDTO;
 import com.wimone.enjoytix.order.dto.resp.OrderCreateRespDTO;
 import com.wimone.enjoytix.order.dto.resp.OrderDetailRespDTO;
 import com.wimone.enjoytix.order.dto.resp.OrderItemRespDTO;
+import com.wimone.enjoytix.order.dto.resp.OrderPurchaseCheckRespDTO;
 import com.wimone.enjoytix.order.message.NoopOrderTimeoutMessageSender;
 import com.wimone.enjoytix.order.message.OrderTimeoutMessage;
 import com.wimone.enjoytix.order.message.OrderTimeoutMessageSender;
+import com.wimone.enjoytix.order.remote.PerformanceRemoteService;
 import com.wimone.enjoytix.order.remote.TicketRemoteService;
+import com.wimone.enjoytix.order.remote.dto.ShowSessionRespDTO;
 import com.wimone.enjoytix.order.remote.dto.TicketAvailabilityRespDTO;
 import com.wimone.enjoytix.order.remote.dto.TicketIssueReqDTO;
 import com.wimone.enjoytix.order.remote.dto.TicketIssueRespDTO;
@@ -45,6 +48,7 @@ public class OrderServiceImpl implements OrderService, OrderTimeoutCloseService 
 
     private final OrderRepository orderRepository;
     private final TicketRemoteService ticketRemoteService;
+    private final PerformanceRemoteService performanceRemoteService;
     private final IdGeneratorManager idGeneratorManager;
     private final OrderTimeoutMessageSender orderTimeoutMessageSender;
 
@@ -52,10 +56,12 @@ public class OrderServiceImpl implements OrderService, OrderTimeoutCloseService 
     public OrderServiceImpl(
             OrderRepository orderRepository,
             TicketRemoteService ticketRemoteService,
+            PerformanceRemoteService performanceRemoteService,
             IdGeneratorManager idGeneratorManager,
             OrderTimeoutMessageSender orderTimeoutMessageSender) {
         this.orderRepository = orderRepository;
         this.ticketRemoteService = ticketRemoteService;
+        this.performanceRemoteService = performanceRemoteService;
         this.idGeneratorManager = idGeneratorManager;
         this.orderTimeoutMessageSender = orderTimeoutMessageSender;
     }
@@ -64,7 +70,7 @@ public class OrderServiceImpl implements OrderService, OrderTimeoutCloseService 
             OrderRepository orderRepository,
             TicketRemoteService ticketRemoteService,
             IdGeneratorManager idGeneratorManager) {
-        this(orderRepository, ticketRemoteService, idGeneratorManager, new NoopOrderTimeoutMessageSender());
+        this(orderRepository, ticketRemoteService, null, idGeneratorManager, new NoopOrderTimeoutMessageSender());
     }
 
     @Override
@@ -78,6 +84,8 @@ public class OrderServiceImpl implements OrderService, OrderTimeoutCloseService 
         TicketLockRespDTO ticketLock = callTicketLock(userId, new TicketLockReqDTO(
                 requestParam.getShowId(),
                 requestParam.getCategoryId(),
+                requestParam.getAreaId(),
+                requestParam.getAllocationMode(),
                 quantity,
                 requestParam.getSeatIds()
         ));
@@ -218,6 +226,24 @@ public class OrderServiceImpl implements OrderService, OrderTimeoutCloseService 
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public OrderPurchaseCheckRespDTO checkPurchase(Long userId, Long performanceId) {
+        if (userId == null) {
+            throw new ClientException("User id is required");
+        }
+        if (performanceId == null) {
+            throw new ClientException("Performance id is required");
+        }
+        return orderRepository.listOrdersByUser(userId)
+                .stream()
+                .filter(each -> OrderStatusEnum.PAID.name().equals(each.getStatus()))
+                .filter(each -> performanceId.equals(queryPerformanceId(each.getShowId())))
+                .findFirst()
+                .map(each -> new OrderPurchaseCheckRespDTO(Boolean.TRUE, each.getId(), each.getUpdateTime()))
+                .orElseGet(() -> new OrderPurchaseCheckRespDTO(Boolean.FALSE, null, null));
+    }
+
+    @Override
     @Scheduled(fixedDelayString = "${order.expired-order-scan-fixed-delay-millis:30000}")
     public synchronized void closeExpiredOrders() {
         LocalDateTime now = LocalDateTime.now();
@@ -294,6 +320,18 @@ public class OrderServiceImpl implements OrderService, OrderTimeoutCloseService 
             throw new RemoteException("Issue ticket failed: " + result.getMessage());
         }
         return result.getData();
+    }
+
+    private Long queryPerformanceId(Long showId) {
+        if (performanceRemoteService == null) {
+            throw new RemoteException("Performance service is not configured");
+        }
+        var result = performanceRemoteService.show(showId);
+        if (!result.isSuccess() || result.getData() == null) {
+            throw new RemoteException("Query show failed: " + result.getMessage());
+        }
+        ShowSessionRespDTO show = result.getData();
+        return show.performanceId();
     }
 
     private int normalizeQuantity(Integer quantity) {
