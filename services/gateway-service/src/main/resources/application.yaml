@@ -86,6 +86,15 @@ spring:
               args:
                 blackPathPre:
                   - /api/comment
+        - id: enjoytix-agent-service
+          uri: lb://enjoytix-agent-service
+          predicates:
+            - Path=/api/agent/**
+          filters:
+            - name: TokenValidate
+              args:
+                blackPathPre:
+                  - /api/agent
         - id: enjoytix-user-service-openapi
           uri: lb://enjoytix-user-service
           predicates:
