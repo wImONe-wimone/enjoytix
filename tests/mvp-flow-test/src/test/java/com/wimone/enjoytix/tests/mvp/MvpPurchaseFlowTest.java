@@ -168,6 +168,8 @@ class MvpPurchaseFlowTest {
             TicketLockReqDTO lockReq = new TicketLockReqDTO();
             lockReq.setShowId(requestParam.showId());
             lockReq.setCategoryId(requestParam.categoryId());
+            lockReq.setAreaId(requestParam.areaId());
+            lockReq.setAllocationMode(requestParam.allocationMode());
             lockReq.setQuantity(requestParam.quantity());
             lockReq.setSeatIds(requestParam.seatIds());
             TicketLockRespDTO result = delegate.lock(userId, lockReq);
@@ -199,6 +201,14 @@ class MvpPurchaseFlowTest {
                     result.orderId(),
                     result.ticketCodes()
             ));
+        }
+
+        @Override
+        public Result<Boolean> refund(Long userId, com.wimone.enjoytix.order.remote.dto.TicketRefundReqDTO requestParam) {
+            com.wimone.enjoytix.ticket.dto.req.TicketRefundReqDTO refundReq = new com.wimone.enjoytix.ticket.dto.req.TicketRefundReqDTO();
+            refundReq.setLockId(requestParam.lockId());
+            refundReq.setOrderId(requestParam.orderId());
+            return Result.success(delegate.refund(userId, refundReq));
         }
 
         private com.wimone.enjoytix.order.remote.dto.TicketAvailabilityRespDTO convertAvailability(TicketAvailabilityRespDTO source) {
