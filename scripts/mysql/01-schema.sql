@@ -358,14 +358,10 @@ CREATE TABLE IF NOT EXISTS `et_show_seat_category` (
 
 CALL `add_column_if_missing`(DATABASE(), 'et_show_seat_category', 'sale_locked', '`sale_locked` TINYINT NOT NULL DEFAULT 0 AFTER `seat_id`');
 
-DROP PROCEDURE IF EXISTS `add_column_if_missing`;
-DROP PROCEDURE IF EXISTS `add_index_if_missing`;
-DROP PROCEDURE IF EXISTS `drop_index_if_exists`;
-
 CREATE TABLE IF NOT EXISTS `et_seat` (
     `id` BIGINT NOT NULL,
     `seat_map_id` BIGINT NOT NULL,
-    `area_name` VARCHAR(64) NOT NULL,
+    `area_id` BIGINT NOT NULL,
     `row_no` INT NOT NULL,
     `column_no` INT NOT NULL,
     `seat_no` VARCHAR(32) NOT NULL,
@@ -375,8 +371,36 @@ CREATE TABLE IF NOT EXISTS `et_seat` (
     `del_flag` TINYINT NOT NULL DEFAULT 0,
     PRIMARY KEY (`id`),
     KEY `idx_seat_map_id` (`seat_map_id`),
+    KEY `idx_seat_map_area_position` (`seat_map_id`, `area_id`, `row_no`, `column_no`),
     UNIQUE KEY `uk_seat_map_position` (`seat_map_id`, `row_no`, `column_no`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='physical seat';
+
+CALL `add_column_if_missing`(DATABASE(), 'et_seat', 'area_id', '`area_id` BIGINT NULL AFTER `seat_map_id`');
+SET @area_name_exists = (
+    SELECT COUNT(*)
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'et_seat'
+      AND column_name = 'area_name'
+);
+SET @area_backfill_sql = IF(
+    @area_name_exists > 0,
+    'UPDATE `et_seat` SET `area_id` = CASE LOWER(TRIM(`area_name`)) WHEN ''front'' THEN `seat_map_id` * 100 + 1 WHEN ''standard'' THEN `seat_map_id` * 100 + 2 ELSE `seat_map_id` * 100000 + MOD(CRC32(LOWER(TRIM(`area_name`))), 99999) + 1 END WHERE `area_id` IS NULL',
+    'SELECT 1'
+);
+PREPARE stmt FROM @area_backfill_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+ALTER TABLE `et_seat` MODIFY COLUMN `area_id` BIGINT NOT NULL;
+SET @area_name_drop_sql = IF(@area_name_exists > 0, 'ALTER TABLE `et_seat` DROP COLUMN `area_name`', 'SELECT 1');
+PREPARE stmt FROM @area_name_drop_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+CALL `add_index_if_missing`(DATABASE(), 'et_seat', 'idx_seat_map_area_position', 'INDEX `idx_seat_map_area_position` (`seat_map_id`, `area_id`, `row_no`, `column_no`)');
+
+DROP PROCEDURE IF EXISTS `add_column_if_missing`;
+DROP PROCEDURE IF EXISTS `add_index_if_missing`;
+DROP PROCEDURE IF EXISTS `drop_index_if_exists`;
 
 USE `enjoytix_ticket`;
 
@@ -403,7 +427,7 @@ CREATE TABLE IF NOT EXISTS `et_seat_stock` (
     `show_id` BIGINT NOT NULL,
     `category_id` BIGINT NOT NULL,
     `seat_id` BIGINT NOT NULL,
-    `area_name` VARCHAR(64) NOT NULL,
+    `area_id` BIGINT NOT NULL,
     `row_no` INT NOT NULL,
     `column_no` INT NOT NULL,
     `seat_no` VARCHAR(32) NOT NULL,
@@ -415,8 +439,52 @@ CREATE TABLE IF NOT EXISTS `et_seat_stock` (
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_seat_stock_show_seat` (`show_id`, `seat_id`),
     KEY `idx_seat_stock_show_category` (`show_id`, `category_id`),
+    KEY `idx_seat_stock_show_category_status_area_row_col` (`show_id`, `category_id`, `status`, `area_id`, `row_no`, `column_no`),
     KEY `idx_seat_stock_lock_id` (`lock_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='show seat stock';
+
+SET @area_id_exists = (
+    SELECT COUNT(*)
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'et_seat_stock'
+      AND column_name = 'area_id'
+);
+SET @area_id_add_sql = IF(@area_id_exists = 0, 'ALTER TABLE `et_seat_stock` ADD COLUMN `area_id` BIGINT NULL AFTER `seat_id`', 'SELECT 1');
+PREPARE stmt FROM @area_id_add_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+SET @area_name_exists = (
+    SELECT COUNT(*)
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name = 'et_seat_stock'
+      AND column_name = 'area_name'
+);
+SET @area_backfill_sql = IF(
+    @area_name_exists > 0,
+    'UPDATE `et_seat_stock` stock LEFT JOIN `enjoytix_performance`.`et_seat` seat ON seat.`id` = stock.`seat_id` SET stock.`area_id` = COALESCE(seat.`area_id`, CRC32(CONCAT(''legacy-area:'', LOWER(TRIM(stock.`area_name`)))) + 1) WHERE stock.`area_id` IS NULL',
+    'SELECT 1'
+);
+PREPARE stmt FROM @area_backfill_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+ALTER TABLE `et_seat_stock` MODIFY COLUMN `area_id` BIGINT NOT NULL;
+SET @area_name_drop_sql = IF(@area_name_exists > 0, 'ALTER TABLE `et_seat_stock` DROP COLUMN `area_name`', 'SELECT 1');
+PREPARE stmt FROM @area_name_drop_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+SET @area_index_exists = (
+    SELECT COUNT(*)
+    FROM information_schema.statistics
+    WHERE table_schema = DATABASE()
+      AND table_name = 'et_seat_stock'
+      AND index_name = 'idx_seat_stock_show_category_status_area_row_col'
+);
+SET @area_index_add_sql = IF(@area_index_exists = 0, 'ALTER TABLE `et_seat_stock` ADD INDEX `idx_seat_stock_show_category_status_area_row_col` (`show_id`, `category_id`, `status`, `area_id`, `row_no`, `column_no`)', 'SELECT 1');
+PREPARE stmt FROM @area_index_add_sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 CREATE TABLE IF NOT EXISTS `et_seat_lock` (
     `id` BIGINT NOT NULL,

@@ -707,7 +707,10 @@ public class PerformanceServiceImpl implements PerformanceService {
         if (requestParam == null) {
             throw new ClientException("Seat request is required");
         }
-        String areaName = trimRequired(requestParam.getAreaName(), "Seat area name is required");
+        Long areaId = requestParam.getAreaId();
+        if (areaId == null) {
+            throw new ClientException("Seat area id is required");
+        }
         String seatNo = trimRequired(requestParam.getSeatNo(), "Seat number is required");
         Integer rowNo = requestParam.getRowNo();
         Integer columnNo = requestParam.getColumnNo();
@@ -728,7 +731,7 @@ public class PerformanceServiceImpl implements PerformanceService {
         if (duplicateSeatNo) {
             throw new ClientException("Seat number already exists");
         }
-        seat.setAreaName(areaName);
+        seat.setAreaId(areaId);
         seat.setRowNo(rowNo);
         seat.setColumnNo(columnNo);
         seat.setSeatNo(seatNo);
@@ -1029,7 +1032,7 @@ public class PerformanceServiceImpl implements PerformanceService {
                                     }
                                     return new TicketSeatStockConfigReqDTO(
                                             seat.getId(),
-                                            seat.getAreaName(),
+                                            seat.getAreaId(),
                                             seat.getRowNo(),
                                             seat.getColumnNo(),
                                             seat.getSeatNo(),
@@ -1348,7 +1351,7 @@ public class PerformanceServiceImpl implements PerformanceService {
                 SeatDO seat = new SeatDO();
                 seat.setId(idGeneratorManager.nextId());
                 seat.setSeatMapId(seatMap.getId());
-                seat.setAreaName(defaultSeatArea(row));
+                seat.setAreaId(defaultSeatAreaId(seatMap.getId(), row));
                 seat.setRowNo(row);
                 seat.setColumnNo(column);
                 seat.setSeatNo(defaultSeatNo(row, column));
@@ -1419,7 +1422,7 @@ public class PerformanceServiceImpl implements PerformanceService {
                 SeatDO seat = new SeatDO();
                 seat.setId(idGeneratorManager.nextId());
                 seat.setSeatMapId(seatMap.getId());
-                seat.setAreaName(defaultSeatArea(row));
+                seat.setAreaId(defaultSeatAreaId(seatMap.getId(), row));
                 seat.setRowNo(row);
                 seat.setColumnNo(column);
                 seat.setSeatNo(defaultSeatNo(row, column));
@@ -1456,8 +1459,8 @@ public class PerformanceServiceImpl implements PerformanceService {
         return rowNo + ":" + columnNo;
     }
 
-    private String defaultSeatArea(int row) {
-        return row <= 2 ? "Front" : "Standard";
+    private Long defaultSeatAreaId(Long seatMapId, int row) {
+        return seatMapId * 100 + (row <= 2 ? 1 : 2);
     }
 
     private String defaultSeatNo(int row, int column) {
@@ -1709,7 +1712,7 @@ public class PerformanceServiceImpl implements PerformanceService {
     }
 
     private SeatRespDTO convertSeat(SeatDO seat) {
-        return new SeatRespDTO(seat.getId(), seat.getAreaName(), seat.getRowNo(), seat.getColumnNo(), seat.getSeatNo(), seat.getStatus());
+        return new SeatRespDTO(seat.getId(), seat.getAreaId(), seat.getRowNo(), seat.getColumnNo(), seat.getSeatNo(), seat.getStatus());
     }
 
     private SeatMapRespDTO convertSeatMap(SeatMapDO seatMap) {

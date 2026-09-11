@@ -67,11 +67,11 @@ public class TicketController {
         return Results.success(ticketService.seats(showId));
     }
 
-    // 是锁定票的库存和座位
+    // 锁定票档库存和座位
     @OperationLog("ticket-lock")
-    @Operation(summary = "Lock tickets", description = "Lock ticket category inventory or specific seats for checkout.")
+    @Operation(summary = "Lock tickets", description = "Lock ticket category inventory or specific seats for checkout. Supports area-aware automatic allocation.")
     @Idempotent(
-            key = "'ticket:lock:' + #p0 + ':' + #p1.showId + ':' + #p1.categoryId + ':' + #p1.quantity + ':' + #p1.seatIds",
+            key = "'ticket:lock:' + #p0 + ':' + #p1.showId + ':' + #p1.categoryId + ':' + #p1.areaId + ':' + #p1.allocationMode + ':' + #p1.quantity + ':' + #p1.seatIds",
             type = IdempotentTypeEnum.SPEL,
             keyTimeout = 5,
             message = "Ticket lock request is being processed"
@@ -118,7 +118,7 @@ public class TicketController {
         return Results.success(ticketService.issue(userId, requestParam));
     }
 
-    // 閫€绁ㄥ悗閲婃斁宸插嚭绁ㄧ殑搴т綅鍜屽簱瀛?
+    // 退票后释放已出票的座位和库存
     @OperationLog("ticket-refund")
     @Operation(summary = "Refund issued tickets", description = "Return issued ticket stock or seats after a successful refund.")
     @Idempotent(

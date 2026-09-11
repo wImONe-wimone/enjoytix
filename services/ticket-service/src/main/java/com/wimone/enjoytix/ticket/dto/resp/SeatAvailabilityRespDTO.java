@@ -10,8 +10,8 @@ public record SeatAvailabilityRespDTO(
         Long categoryId,
         @Schema(description = "Seat id.", example = "400101")
         Long seatId,
-        @Schema(description = "Seat area name.", example = "A Zone")
-        String areaName,
+        @Schema(description = "Seat area id.", example = "40001")
+        Long areaId,
         @Schema(description = "Row number.", example = "1")
         Integer rowNo,
         @Schema(description = "Column number.", example = "8")

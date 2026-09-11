@@ -535,7 +535,7 @@ public class InMemoryPerformanceRepository implements PerformanceRepository {
                 SeatDO seat = new SeatDO();
                 seat.setId(base + row * 100L + column);
                 seat.setSeatMapId(seatMapId);
-                seat.setAreaName(row <= 2 ? "Front" : "Standard");
+                seat.setAreaId(defaultAreaId(seatMapId, row));
                 seat.setRowNo(row);
                 seat.setColumnNo(column);
                 seat.setSeatNo((char) ('A' + row - 1) + String.valueOf(column));
@@ -581,5 +581,9 @@ public class InMemoryPerformanceRepository implements PerformanceRepository {
         entity.setSaleLocked(0);
         entity.setDelFlag(0);
         seatCategoryMappings.put(entity.getId(), entity);
+    }
+
+    private Long defaultAreaId(Long seatMapId, int row) {
+        return seatMapId * 100 + (row <= 2 ? 1 : 2);
     }
 }

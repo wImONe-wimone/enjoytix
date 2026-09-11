@@ -2,7 +2,7 @@ package com.wimone.enjoytix.performance.remote.dto;
 
 public record TicketSeatStockConfigReqDTO(
         Long seatId,
-        String areaName,
+        Long areaId,
         Integer rowNo,
         Integer columnNo,
         String seatNo,

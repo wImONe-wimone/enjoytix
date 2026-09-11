@@ -72,6 +72,20 @@ public class InMemoryTicketRepository implements TicketRepository {
     }
 
     @Override
+    public List<SeatStockDO> listSeats(Long showId, Long categoryId, Long areaId) {
+        return seats.values()
+                .stream()
+                .filter(each -> showId.equals(each.getShowId()))
+                .filter(each -> categoryId == null || categoryId.equals(each.getCategoryId()))
+                .filter(each -> SeatStockStatusEnum.AVAILABLE.name().equals(each.getStatus()))
+                .filter(each -> areaId == null || areaId.equals(each.getAreaId()))
+                .sorted(Comparator.comparing(SeatStockDO::getAreaId, Comparator.nullsLast(Long::compareTo))
+                        .thenComparing(SeatStockDO::getRowNo)
+                        .thenComparing(SeatStockDO::getColumnNo))
+                .toList();
+    }
+
+    @Override
     public Optional<SeatStockDO> findSeat(Long showId, Long seatId) {
         return Optional.ofNullable(seats.get(seatKey(showId, seatId)));
     }
@@ -130,7 +144,7 @@ public class InMemoryTicketRepository implements TicketRepository {
         for (int row = 1; row <= 6; row++) {
             for (int column = 1; column <= 8; column++) {
                 Long categoryId = concertCategory(row, column);
-                seat(2001L, categoryId, base + row * 100L + column, row <= 2 ? "Front" : "Standard", row, column);
+                seat(2001L, categoryId, base + row * 100L + column, defaultAreaId(seatMapId, row), row, column);
             }
         }
     }
@@ -150,18 +164,18 @@ public class InMemoryTicketRepository implements TicketRepository {
         long base = seatMapId * 1000;
         for (int row = 1; row <= 4; row++) {
             for (int column = 1; column <= 6; column++) {
-                seat(2002L, 3004L, base + row * 100L + column, row <= 2 ? "Front" : "Standard", row, column);
+                seat(2002L, 3004L, base + row * 100L + column, defaultAreaId(seatMapId, row), row, column);
             }
         }
     }
 
-    private void seat(Long showId, Long categoryId, Long seatId, String areaName, Integer rowNo, Integer columnNo) {
+    private void seat(Long showId, Long categoryId, Long seatId, Long areaId, Integer rowNo, Integer columnNo) {
         SeatStockDO entity = new SeatStockDO();
         entity.setId(seatId);
         entity.setShowId(showId);
         entity.setCategoryId(categoryId);
         entity.setSeatId(seatId);
-        entity.setAreaName(areaName);
+        entity.setAreaId(areaId);
         entity.setRowNo(rowNo);
         entity.setColumnNo(columnNo);
         entity.setSeatNo((char) ('A' + rowNo - 1) + String.valueOf(columnNo));
@@ -180,5 +194,9 @@ public class InMemoryTicketRepository implements TicketRepository {
 
     private Long seedStockId(Long showId, Long categoryId) {
         return showId * 100000L + categoryId;
+    }
+
+    private Long defaultAreaId(Long seatMapId, int row) {
+        return seatMapId * 100 + (row <= 2 ? 1 : 2);
     }
 }

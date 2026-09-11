@@ -2,6 +2,7 @@ package com.wimone.enjoytix.ticket.service.impl;
 
 import com.wimone.enjoytix.framework.convention.exception.ClientException;
 import com.wimone.enjoytix.framework.distributedid.core.IdGeneratorManager;
+import com.wimone.enjoytix.framework.base.ticket.TicketAllocationModeEnum;
 import com.wimone.enjoytix.ticket.common.enums.SeatStockStatusEnum;
 import com.wimone.enjoytix.ticket.dto.req.TicketCategoryStockConfigReqDTO;
 import com.wimone.enjoytix.ticket.dto.req.TicketCategoryMappingReqDTO;
@@ -90,8 +91,8 @@ class TicketServiceImplTest {
                 showId,
                 List.of(
                         categoryConfig(94001L, "VIP", "990.00", 2, 1, List.of(
-                                seatConfig(910101L, "Front", 1, 1, "A1"),
-                                seatConfig(910102L, "Front", 1, 2, "A2")
+                                seatConfig(910101L, 910101L, 1, 1, "A1"),
+                                seatConfig(910102L, 910101L, 1, 2, "A2")
                         )),
                         categoryConfig(94002L, "Standing", "199.00", 30, 0, null)
                 )
@@ -133,12 +134,31 @@ class TicketServiceImplTest {
     }
 
     @Test
+    void lockShouldAutoAllocateSeatsByAreaId() {
+        TicketLockReqDTO lockRequest = new TicketLockReqDTO();
+        lockRequest.setShowId(2001L);
+        lockRequest.setCategoryId(3001L);
+        lockRequest.setAreaId(40001L);
+        lockRequest.setAllocationMode(TicketAllocationModeEnum.AUTO);
+        lockRequest.setQuantity(2);
+
+        TicketLockRespDTO lock = ticketService.lock(100L, lockRequest);
+
+        assertEquals(2, lock.quantity());
+        assertEquals(List.of(400101L, 400102L), lock.seatIds());
+        List<SeatAvailabilityRespDTO> seats = ticketService.seats(2001L);
+        assertTrue(seats.stream()
+                .filter(each -> List.of(400101L, 400102L).contains(each.seatId()))
+                .allMatch(each -> SeatStockStatusEnum.LOCKED.name().equals(each.status())));
+    }
+
+    @Test
     void initConfiguredShowStockShouldRejectDuplicateSeats() {
         TicketShowStockConfigInitReqDTO request = new TicketShowStockConfigInitReqDTO(
                 9102L,
                 List.of(
-                        categoryConfig(94011L, "VIP", "990.00", 1, 1, List.of(seatConfig(910201L, "Front", 1, 1, "A1"))),
-                        categoryConfig(94012L, "A Zone", "590.00", 1, 1, List.of(seatConfig(910201L, "Front", 1, 1, "A1")))
+                        categoryConfig(94011L, "VIP", "990.00", 1, 1, List.of(seatConfig(910201L, 910201L, 1, 1, "A1"))),
+                        categoryConfig(94012L, "A Zone", "590.00", 1, 1, List.of(seatConfig(910201L, 910201L, 1, 1, "A1")))
                 )
         );
 
@@ -151,8 +171,8 @@ class TicketServiceImplTest {
         TicketShowStockConfigInitReqDTO request = new TicketShowStockConfigInitReqDTO(
                 showId,
                 List.of(categoryConfig(94021L, "VIP", "990.00", 2, 1, List.of(
-                        seatConfig(910301L, "Front", 1, 1, "A1", true),
-                        seatConfig(910302L, "Front", 1, 2, "A2")
+                        seatConfig(910301L, 910301L, 1, 1, "A1", true),
+                        seatConfig(910302L, 910301L, 1, 2, "A2")
                 )))
         );
 
@@ -179,8 +199,8 @@ class TicketServiceImplTest {
         TicketShowStockConfigInitReqDTO sourceRequest = new TicketShowStockConfigInitReqDTO(
                 sourceShowId,
                 List.of(categoryConfig(94031L, "VIP", "990.00", 2, 1, List.of(
-                        seatConfig(910401L, "Front", 1, 1, "A1", true),
-                        seatConfig(910402L, "Front", 1, 2, "A2")
+                        seatConfig(910401L, 910401L, 1, 1, "A1", true),
+                        seatConfig(910402L, 910401L, 1, 2, "A2")
                 )))
         );
         assertTrue(ticketService.initConfiguredShowStock(sourceRequest));
@@ -206,6 +226,30 @@ class TicketServiceImplTest {
                         && SeatStockStatusEnum.AVAILABLE.name().equals(each.status())));
     }
 
+    @Test
+    void lockShouldRejectAllocationModeThatConflictsWithTicketCategory() {
+        TicketLockReqDTO seatedRequest = new TicketLockReqDTO();
+        seatedRequest.setShowId(2001L);
+        seatedRequest.setCategoryId(3001L);
+        seatedRequest.setAllocationMode(TicketAllocationModeEnum.GENERAL_ADMISSION);
+        seatedRequest.setQuantity(1);
+
+        assertThrows(ClientException.class, () -> ticketService.lock(100L, seatedRequest));
+
+        Long showId = 9201L;
+        ticketService.initConfiguredShowStock(new TicketShowStockConfigInitReqDTO(
+                showId,
+                List.of(categoryConfig(96001L, "Standing", "199.00", 30, 0, null))
+        ));
+        TicketLockReqDTO standingRequest = new TicketLockReqDTO();
+        standingRequest.setShowId(showId);
+        standingRequest.setCategoryId(96001L);
+        standingRequest.setAllocationMode(TicketAllocationModeEnum.AUTO);
+        standingRequest.setQuantity(1);
+
+        assertThrows(ClientException.class, () -> ticketService.lock(100L, standingRequest));
+    }
+
     private TicketCategoryStockConfigReqDTO categoryConfig(
             Long categoryId,
             String categoryName,
@@ -223,11 +267,11 @@ class TicketServiceImplTest {
         );
     }
 
-    private TicketSeatStockConfigReqDTO seatConfig(Long seatId, String areaName, Integer rowNo, Integer columnNo, String seatNo) {
-        return seatConfig(seatId, areaName, rowNo, columnNo, seatNo, false);
+    private TicketSeatStockConfigReqDTO seatConfig(Long seatId, Long areaId, Integer rowNo, Integer columnNo, String seatNo) {
+        return seatConfig(seatId, areaId, rowNo, columnNo, seatNo, false);
     }
 
-    private TicketSeatStockConfigReqDTO seatConfig(Long seatId, String areaName, Integer rowNo, Integer columnNo, String seatNo, boolean locked) {
-        return new TicketSeatStockConfigReqDTO(seatId, areaName, rowNo, columnNo, seatNo, locked);
+    private TicketSeatStockConfigReqDTO seatConfig(Long seatId, Long areaId, Integer rowNo, Integer columnNo, String seatNo, boolean locked) {
+        return new TicketSeatStockConfigReqDTO(seatId, areaId, rowNo, columnNo, seatNo, locked);
     }
 }

@@ -1,5 +1,6 @@
 package com.wimone.enjoytix.ticket.service.impl;
 
+import com.wimone.enjoytix.framework.base.ticket.TicketAllocationModeEnum;
 import com.wimone.enjoytix.framework.cache.lock.DistributedLockTemplate;
 import com.wimone.enjoytix.framework.cache.lock.LocalDistributedLockTemplate;
 import com.wimone.enjoytix.framework.convention.exception.ClientException;
@@ -26,6 +27,7 @@ import com.wimone.enjoytix.ticket.dto.resp.TicketIssueRespDTO;
 import com.wimone.enjoytix.ticket.dto.resp.TicketLockRespDTO;
 import com.wimone.enjoytix.ticket.repository.TicketRepository;
 import com.wimone.enjoytix.ticket.service.TicketService;
+import com.wimone.enjoytix.ticket.service.SeatAllocationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -37,6 +39,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -49,6 +52,7 @@ public class TicketServiceImpl implements TicketService {
 
     private final TicketRepository repository;
     private final IdGeneratorManager idGeneratorManager;
+    private final SeatAllocationService seatAllocationService;
     private final long lockTtlMinutes;
     private final DistributedLockTemplate lockTemplate;
 
@@ -56,10 +60,12 @@ public class TicketServiceImpl implements TicketService {
     public TicketServiceImpl(
             TicketRepository repository,
             IdGeneratorManager idGeneratorManager,
+            SeatAllocationService seatAllocationService,
             @Value("${ticket.lock.ttl-minutes:15}") long lockTtlMinutes,
             DistributedLockTemplate lockTemplate) {
         this.repository = repository;
         this.idGeneratorManager = idGeneratorManager;
+        this.seatAllocationService = seatAllocationService;
         this.lockTtlMinutes = lockTtlMinutes;
         this.lockTemplate = lockTemplate;
     }
@@ -68,7 +74,7 @@ public class TicketServiceImpl implements TicketService {
             TicketRepository repository,
             IdGeneratorManager idGeneratorManager,
             long lockTtlMinutes) {
-        this(repository, idGeneratorManager, lockTtlMinutes, new LocalDistributedLockTemplate());
+        this(repository, idGeneratorManager, new SeatAllocationService(repository), lockTtlMinutes, new LocalDistributedLockTemplate());
     }
 
     @Override
@@ -89,24 +95,34 @@ public class TicketServiceImpl implements TicketService {
 
     @Override
     public TicketLockRespDTO lock(Long userId, TicketLockReqDTO requestParam) {
-        // 加上锁
-        return lockTemplate.execute(TicketLockKeys.showStock(requestParam.getShowId()), LOCK_WAIT_SECONDS, LOCK_LEASE_SECONDS, TimeUnit.SECONDS, () -> {
-            // 按场次id获取锁
+        List<Long> requestedSeatIds = normalizeSeatIds(requestParam.getSeatIds());
+        int quantity = requestedSeatIds.isEmpty() ? normalizeQuantity(requestParam.getQuantity()) : requestedSeatIds.size();
+        TicketAllocationModeEnum allocationMode = resolveAllocationMode(requestParam, requestedSeatIds);
+        Long requestedAreaId = requestParam.getAreaId();
+        Long lockAreaId = requestedSeatIds.isEmpty()
+                ? requestedAreaId
+                : resolveCommonAreaId(requestParam.getShowId(), requestedSeatIds);
+        return lockTemplate.execute(TicketLockKeys.showCategoryArea(requestParam.getShowId(), requestParam.getCategoryId(), lockAreaId), LOCK_WAIT_SECONDS, LOCK_LEASE_SECONDS, TimeUnit.SECONDS, () -> {
             expireLocks(requestParam.getShowId());
-            // 查询票档库存
             TicketStockDO stock = findStock(requestParam.getShowId(), requestParam.getCategoryId());
-            List<Long> seatIds = normalizeSeatIds(requestParam.getSeatIds());
-            int quantity = seatIds.isEmpty() ? normalizeQuantity(requestParam.getQuantity()) : seatIds.size();
+            validateAllocationMode(stock, allocationMode);
             if (stock.availableStock() < quantity) {
                 throw new ClientException("Insufficient ticket stock");
             }
-            if (!seatIds.isEmpty()) {
-                validateAndLockSeats(requestParam.getShowId(), requestParam.getCategoryId(), seatIds);
+            List<Long> seatIds = requestedSeatIds;
+            if (seatIds.isEmpty()) {
+                if (TicketAllocationModeEnum.SELECTED.equals(allocationMode)) {
+                    throw new ClientException("Seat ids are required for selected allocation mode");
+                }
+                if (Integer.valueOf(1).equals(stock.getSeatSelectable())) {
+                    seatIds = seatAllocationService.allocateSeats(requestParam.getShowId(), requestParam.getCategoryId(), requestedAreaId, quantity);
+                }
             }
-            // 扣减库存，即增加锁定库存的数量
+            if (!seatIds.isEmpty()) {
+                validateAndLockSeats(requestParam.getShowId(), requestParam.getCategoryId(), seatIds, lockAreaId);
+            }
             stock.setLockedStock(stock.getLockedStock() + quantity);
             repository.saveStock(stock);
-            // 保存锁定的票
             TicketLockDO lockDO = new TicketLockDO();
             lockDO.setId(idGeneratorManager.nextId());
             lockDO.setUserId(userId);
@@ -134,7 +150,7 @@ public class TicketServiceImpl implements TicketService {
     public Boolean release(Long userId, TicketReleaseReqDTO requestParam) {
         // 根据 lockId 查询锁记录。
         TicketLockDO lockDO = findLock(requestParam.getLockId());
-        return lockTemplate.execute(TicketLockKeys.showStock(lockDO.getShowId()), LOCK_WAIT_SECONDS, LOCK_LEASE_SECONDS, TimeUnit.SECONDS, () -> {
+        return lockTemplate.execute(lockKeyFor(lockDO), LOCK_WAIT_SECONDS, LOCK_LEASE_SECONDS, TimeUnit.SECONDS, () -> {
             assertOwner(userId, lockDO);
             releaseInternal(lockDO, TicketLockStatusEnum.RELEASED);
             return Boolean.TRUE;
@@ -144,7 +160,7 @@ public class TicketServiceImpl implements TicketService {
     @Override
     public TicketIssueRespDTO issue(Long userId, TicketIssueReqDTO requestParam) {
         TicketLockDO lockDO = findLock(requestParam.getLockId());
-        return lockTemplate.execute(TicketLockKeys.showStock(lockDO.getShowId()), LOCK_WAIT_SECONDS, LOCK_LEASE_SECONDS, TimeUnit.SECONDS, () -> {
+        return lockTemplate.execute(lockKeyFor(lockDO), LOCK_WAIT_SECONDS, LOCK_LEASE_SECONDS, TimeUnit.SECONDS, () -> {
             assertOwner(userId, lockDO);
             if (!TicketLockStatusEnum.LOCKED.name().equals(lockDO.getStatus())) {
                 throw new ClientException("Ticket lock is not active");
@@ -171,7 +187,7 @@ public class TicketServiceImpl implements TicketService {
     @Override
     public Boolean refund(Long userId, TicketRefundReqDTO requestParam) {
         TicketLockDO lockDO = findLock(requestParam.getLockId());
-        return lockTemplate.execute(TicketLockKeys.showStock(lockDO.getShowId()), LOCK_WAIT_SECONDS, LOCK_LEASE_SECONDS, TimeUnit.SECONDS, () -> {
+        return lockTemplate.execute(lockKeyFor(lockDO), LOCK_WAIT_SECONDS, LOCK_LEASE_SECONDS, TimeUnit.SECONDS, () -> {
             assertOwner(userId, lockDO);
             if (TicketLockStatusEnum.REFUNDED.name().equals(lockDO.getStatus())) {
                 return Boolean.TRUE;
@@ -275,8 +291,8 @@ public class TicketServiceImpl implements TicketService {
         if (seat == null || seat.seatId() == null) {
             throw new ClientException("Configured seat id is required");
         }
-        if (seat.areaName() == null || seat.areaName().isBlank()) {
-            throw new ClientException("Configured seat area name is required");
+        if (seat.areaId() == null) {
+            throw new ClientException("Configured seat area id is required");
         }
         if (seat.rowNo() == null || seat.rowNo() <= 0 || seat.columnNo() == null || seat.columnNo() <= 0) {
             throw new ClientException("Configured seat position is invalid");
@@ -325,7 +341,7 @@ public class TicketServiceImpl implements TicketService {
             target.setShowId(showId);
             target.setCategoryId(category.categoryId());
             target.setSeatId(source.seatId());
-            target.setAreaName(source.areaName());
+            target.setAreaId(source.areaId());
             target.setRowNo(source.rowNo());
             target.setColumnNo(source.columnNo());
             target.setSeatNo(source.seatNo());
@@ -388,7 +404,7 @@ public class TicketServiceImpl implements TicketService {
             target.setShowId(targetShowId);
             target.setCategoryId(targetCategoryId);
             target.setSeatId(source.getSeatId());
-            target.setAreaName(source.getAreaName());
+            target.setAreaId(source.getAreaId());
             target.setRowNo(source.getRowNo());
             target.setColumnNo(source.getColumnNo());
             target.setSeatNo(source.getSeatNo());
@@ -438,11 +454,64 @@ public class TicketServiceImpl implements TicketService {
                 .count();
     }
 
-    private void validateAndLockSeats(Long showId, Long categoryId, List<Long> seatIds) {
+    private TicketAllocationModeEnum resolveAllocationMode(TicketLockReqDTO requestParam, List<Long> requestedSeatIds) {
+        if (!requestedSeatIds.isEmpty()) {
+            return TicketAllocationModeEnum.SELECTED;
+        }
+        if (requestParam.getAllocationMode() != null) {
+            return requestParam.getAllocationMode();
+        }
+        TicketStockDO stock = findStock(requestParam.getShowId(), requestParam.getCategoryId());
+        if (Integer.valueOf(1).equals(stock.getSeatSelectable())) {
+            return TicketAllocationModeEnum.AUTO;
+        }
+        return TicketAllocationModeEnum.GENERAL_ADMISSION;
+    }
+
+    private void validateAllocationMode(TicketStockDO stock, TicketAllocationModeEnum allocationMode) {
+        boolean seatSelectable = Integer.valueOf(1).equals(stock.getSeatSelectable());
+        if (seatSelectable && TicketAllocationModeEnum.GENERAL_ADMISSION.equals(allocationMode)) {
+            throw new ClientException("General admission is not supported for seat-selectable ticket categories");
+        }
+        if (!seatSelectable && !TicketAllocationModeEnum.GENERAL_ADMISSION.equals(allocationMode)) {
+            throw new ClientException("Only general admission is supported for non-seat-selectable ticket categories");
+        }
+    }
+
+    private Long resolveCommonAreaId(Long showId, List<Long> seatIds) {
+        Long areaId = null;
+        for (Long seatId : seatIds) {
+            SeatStockDO seat = repository.findSeat(showId, seatId).orElseThrow(() -> new ClientException("Seat does not exist"));
+            Long currentAreaId = seat.getAreaId();
+            if (currentAreaId == null) {
+                continue;
+            }
+            if (areaId == null) {
+                areaId = currentAreaId;
+                continue;
+            }
+            if (!Objects.equals(areaId, currentAreaId)) {
+                return null;
+            }
+        }
+        return areaId;
+    }
+
+    private String lockKeyFor(TicketLockDO lockDO) {
+        return TicketLockKeys.showCategoryArea(
+                lockDO.getShowId(),
+                lockDO.getCategoryId(),
+                resolveCommonAreaId(lockDO.getShowId(), normalizeSeatIds(lockDO.getSeatIds())));
+    }
+
+    private void validateAndLockSeats(Long showId, Long categoryId, List<Long> seatIds, Long areaId) {
         for (Long seatId : seatIds) {
             SeatStockDO seat = repository.findSeat(showId, seatId).orElseThrow(() -> new ClientException("Seat does not exist"));
             if (!categoryId.equals(seat.getCategoryId())) {
                 throw new ClientException("Seat does not belong to selected ticket category");
+            }
+            if (areaId != null && !Objects.equals(areaId, seat.getAreaId())) {
+                throw new ClientException("Seat does not belong to selected area");
             }
             if (!SeatStockStatusEnum.AVAILABLE.name().equals(seat.getStatus())) {
                 throw new ClientException("Seat is not available");
@@ -558,7 +627,7 @@ public class TicketServiceImpl implements TicketService {
         for (Long seatId : seatIds) {
             repository.findSeat(lockDO.getShowId(), seatId).ifPresent(seat -> {
                 seat.setStatus(SeatStockStatusEnum.AVAILABLE.name());
-                // 清空lock id
+                // 清空 lock id
                 seat.setLockId(null);
                 repository.saveSeat(seat);
             });
@@ -612,7 +681,7 @@ public class TicketServiceImpl implements TicketService {
                 seat.getShowId(),
                 seat.getCategoryId(),
                 seat.getSeatId(),
-                seat.getAreaName(),
+                seat.getAreaId(),
                 seat.getRowNo(),
                 seat.getColumnNo(),
                 seat.getSeatNo(),

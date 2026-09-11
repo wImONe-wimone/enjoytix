@@ -10,10 +10,9 @@ import jakarta.validation.constraints.Size;
 @Schema(description = "Venue seat creation request.")
 public class SeatCreateReqDTO {
 
-    @NotBlank
-    @Size(max = 64)
-    @Schema(description = "Seat area name.", example = "A Zone")
-    private String areaName;
+    @NotNull
+    @Schema(description = "Seat area id.", example = "40001")
+    private Long areaId;
 
     @NotNull
     @Min(1)
@@ -37,12 +36,12 @@ public class SeatCreateReqDTO {
     @Schema(description = "Seat status, 1 means enabled and 0 means disabled.", example = "1")
     private Integer status = 1;
 
-    public String getAreaName() {
-        return areaName;
+    public Long getAreaId() {
+        return areaId;
     }
 
-    public void setAreaName(String areaName) {
-        this.areaName = areaName;
+    public void setAreaId(Long areaId) {
+        this.areaId = areaId;
     }
 
     public Integer getRowNo() {

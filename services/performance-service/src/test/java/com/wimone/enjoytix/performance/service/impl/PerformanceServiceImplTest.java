@@ -398,18 +398,18 @@ class PerformanceServiceImplTest {
     void adminShouldCreateUpdateAndDeleteVenueSeat() {
         assertEquals(48, performanceService.venueSeats(200L).size());
 
-        SeatRespDTO created = performanceService.createVenueSeat(200L, seatReq("Balcony", 7, 1, "G1", 1));
+        SeatRespDTO created = performanceService.createVenueSeat(200L, seatReq(40003L, 7, 1, "G1", 1));
 
         assertNotNull(created.seatId());
-        assertEquals("Balcony", created.areaName());
+        assertEquals(40003L, created.areaId());
         assertEquals(49, performanceService.venueSeats(200L).size());
-        assertThrows(ClientException.class, () -> performanceService.createVenueSeat(200L, seatReq("Other", 7, 1, "G9", 1)));
-        assertThrows(ClientException.class, () -> performanceService.createVenueSeat(200L, seatReq("Other", 7, 2, "g1", 1)));
+        assertThrows(ClientException.class, () -> performanceService.createVenueSeat(200L, seatReq(40004L, 7, 1, "G9", 1)));
+        assertThrows(ClientException.class, () -> performanceService.createVenueSeat(200L, seatReq(40004L, 7, 2, "g1", 1)));
 
-        SeatUpdateReqDTO updateReq = seatUpdateReq("Balcony Plus", 7, 2, "G2", 0);
+        SeatUpdateReqDTO updateReq = seatUpdateReq(40005L, 7, 2, "G2", 0);
         SeatRespDTO updated = performanceService.updateVenueSeat(200L, created.seatId(), updateReq);
 
-        assertEquals("Balcony Plus", updated.areaName());
+        assertEquals(40005L, updated.areaId());
         assertEquals(7, updated.rowNo());
         assertEquals(2, updated.columnNo());
         assertEquals("G2", updated.seatNo());
@@ -423,7 +423,7 @@ class PerformanceServiceImplTest {
 
     @Test
     void adminShouldRejectChangingConfiguredVenueSeat() {
-        SeatUpdateReqDTO updateReq = seatUpdateReq("Front", 1, 1, "A1", 1);
+        SeatUpdateReqDTO updateReq = seatUpdateReq(40001L, 1, 1, "A1", 1);
 
         assertThrows(ClientException.class, () -> performanceService.updateVenueSeat(200L, 400101L, updateReq));
         assertThrows(ClientException.class, () -> performanceService.deleteVenueSeat(200L, 400101L));
@@ -715,9 +715,9 @@ class PerformanceServiceImplTest {
         return request;
     }
 
-    private SeatCreateReqDTO seatReq(String areaName, int rowNo, int columnNo, String seatNo, int status) {
+    private SeatCreateReqDTO seatReq(Long areaId, int rowNo, int columnNo, String seatNo, int status) {
         SeatCreateReqDTO request = new SeatCreateReqDTO();
-        request.setAreaName(areaName);
+        request.setAreaId(areaId);
         request.setRowNo(rowNo);
         request.setColumnNo(columnNo);
         request.setSeatNo(seatNo);
@@ -725,9 +725,9 @@ class PerformanceServiceImplTest {
         return request;
     }
 
-    private SeatUpdateReqDTO seatUpdateReq(String areaName, int rowNo, int columnNo, String seatNo, int status) {
+    private SeatUpdateReqDTO seatUpdateReq(Long areaId, int rowNo, int columnNo, String seatNo, int status) {
         SeatUpdateReqDTO request = new SeatUpdateReqDTO();
-        request.setAreaName(areaName);
+        request.setAreaId(areaId);
         request.setRowNo(rowNo);
         request.setColumnNo(columnNo);
         request.setSeatNo(seatNo);

@@ -9,7 +9,7 @@ public class SeatStockDO extends BaseDO {
     private Long showId;
     private Long categoryId;
     private Long seatId;
-    private String areaName;
+    private Long areaId;
     private Integer rowNo;
     private Integer columnNo;
     private String seatNo;
@@ -40,12 +40,12 @@ public class SeatStockDO extends BaseDO {
         this.seatId = seatId;
     }
 
-    public String getAreaName() {
-        return areaName;
+    public Long getAreaId() {
+        return areaId;
     }
 
-    public void setAreaName(String areaName) {
-        this.areaName = areaName;
+    public void setAreaId(Long areaId) {
+        this.areaId = areaId;
     }
 
     public Integer getRowNo() {

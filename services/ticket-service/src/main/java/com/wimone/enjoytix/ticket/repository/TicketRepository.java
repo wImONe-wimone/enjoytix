@@ -21,6 +21,8 @@ public interface TicketRepository {
 
     List<SeatStockDO> listSeats(Long showId);
 
+    List<SeatStockDO> listSeats(Long showId, Long categoryId, Long areaId);
+
     Optional<SeatStockDO> findSeat(Long showId, Long seatId);
 
     void saveSeat(SeatStockDO seatDO);

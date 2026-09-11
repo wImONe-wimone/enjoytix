@@ -1,6 +1,7 @@
 package com.wimone.enjoytix.ticket.repository;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.wimone.enjoytix.ticket.common.enums.SeatStockStatusEnum;
 import com.wimone.enjoytix.ticket.dao.entity.SeatStockDO;
 import com.wimone.enjoytix.ticket.dao.entity.TicketIssueDO;
 import com.wimone.enjoytix.ticket.dao.entity.TicketLockDO;
@@ -78,6 +79,18 @@ public class MyBatisPlusTicketRepository implements TicketRepository {
     }
 
     @Override
+    public List<SeatStockDO> listSeats(Long showId, Long categoryId, Long areaId) {
+        return seatStockMapper.selectList(Wrappers.lambdaQuery(SeatStockDO.class)
+                .eq(SeatStockDO::getShowId, showId)
+                .eq(categoryId != null, SeatStockDO::getCategoryId, categoryId)
+                .eq(SeatStockDO::getStatus, SeatStockStatusEnum.AVAILABLE.name())
+                .eq(areaId != null, SeatStockDO::getAreaId, areaId)
+                .orderByAsc(SeatStockDO::getAreaId)
+                .orderByAsc(SeatStockDO::getRowNo)
+                .orderByAsc(SeatStockDO::getColumnNo));
+    }
+
+    @Override
     public Optional<SeatStockDO> findSeat(Long showId, Long seatId) {
         return Optional.ofNullable(seatStockMapper.selectOne(Wrappers.lambdaQuery(SeatStockDO.class)
                 .eq(SeatStockDO::getShowId, showId)
@@ -96,7 +109,7 @@ public class MyBatisPlusTicketRepository implements TicketRepository {
                 .set(SeatStockDO::getShowId, seatDO.getShowId())
                 .set(SeatStockDO::getCategoryId, seatDO.getCategoryId())
                 .set(SeatStockDO::getSeatId, seatDO.getSeatId())
-                .set(SeatStockDO::getAreaName, seatDO.getAreaName())
+                .set(SeatStockDO::getAreaId, seatDO.getAreaId())
                 .set(SeatStockDO::getRowNo, seatDO.getRowNo())
                 .set(SeatStockDO::getColumnNo, seatDO.getColumnNo())
                 .set(SeatStockDO::getSeatNo, seatDO.getSeatNo())

@@ -144,11 +144,11 @@ CREATE TEMPORARY TABLE `tmp_seed_columns` (`column_no` INT NOT NULL PRIMARY KEY)
 INSERT INTO `tmp_seed_rows` (`row_no`) VALUES (1), (2), (3), (4), (5), (6);
 INSERT INTO `tmp_seed_columns` (`column_no`) VALUES (1), (2), (3), (4), (5), (6), (7), (8);
 
-INSERT INTO `et_seat` (`id`, `seat_map_id`, `area_name`, `row_no`, `column_no`, `seat_no`, `status`, `del_flag`)
+INSERT INTO `et_seat` (`id`, `seat_map_id`, `area_id`, `row_no`, `column_no`, `seat_no`, `status`, `del_flag`)
 SELECT
     400000 + r.`row_no` * 100 + c.`column_no`,
     400,
-    IF(r.`row_no` <= 2, 'Front', 'Standard'),
+    IF(r.`row_no` <= 2, 40001, 40002),
     r.`row_no`,
     c.`column_no`,
     CONCAT(CHAR(64 + r.`row_no`), c.`column_no`),
@@ -159,7 +159,7 @@ CROSS JOIN `tmp_seed_columns` c
 WHERE r.`row_no` <= 6 AND c.`column_no` <= 8
 ON DUPLICATE KEY UPDATE
     `seat_map_id` = VALUES(`seat_map_id`),
-    `area_name` = VALUES(`area_name`),
+    `area_id` = VALUES(`area_id`),
     `row_no` = VALUES(`row_no`),
     `column_no` = VALUES(`column_no`),
     `seat_no` = VALUES(`seat_no`),
@@ -169,11 +169,11 @@ ON DUPLICATE KEY UPDATE
 DELETE FROM `tmp_seed_rows` WHERE `row_no` > 4;
 DELETE FROM `tmp_seed_columns` WHERE `column_no` > 6;
 
-INSERT INTO `et_seat` (`id`, `seat_map_id`, `area_name`, `row_no`, `column_no`, `seat_no`, `status`, `del_flag`)
+INSERT INTO `et_seat` (`id`, `seat_map_id`, `area_id`, `row_no`, `column_no`, `seat_no`, `status`, `del_flag`)
 SELECT
     401000 + r.`row_no` * 100 + c.`column_no`,
     401,
-    IF(r.`row_no` <= 2, 'Front', 'Standard'),
+    IF(r.`row_no` <= 2, 40101, 40102),
     r.`row_no`,
     c.`column_no`,
     CONCAT(CHAR(64 + r.`row_no`), c.`column_no`),
@@ -184,7 +184,7 @@ CROSS JOIN `tmp_seed_columns` c
 WHERE 1 = 1
 ON DUPLICATE KEY UPDATE
     `seat_map_id` = VALUES(`seat_map_id`),
-    `area_name` = VALUES(`area_name`),
+    `area_id` = VALUES(`area_id`),
     `row_no` = VALUES(`row_no`),
     `column_no` = VALUES(`column_no`),
     `seat_no` = VALUES(`seat_no`),
@@ -258,7 +258,7 @@ CREATE TEMPORARY TABLE `tmp_seed_columns` (`column_no` INT NOT NULL PRIMARY KEY)
 INSERT INTO `tmp_seed_rows` (`row_no`) VALUES (1), (2), (3), (4), (5), (6);
 INSERT INTO `tmp_seed_columns` (`column_no`) VALUES (1), (2), (3), (4), (5), (6), (7), (8);
 
-INSERT INTO `et_seat_stock` (`id`, `show_id`, `category_id`, `seat_id`, `area_name`, `row_no`, `column_no`, `seat_no`, `status`, `lock_id`, `del_flag`)
+INSERT INTO `et_seat_stock` (`id`, `show_id`, `category_id`, `seat_id`, `area_id`, `row_no`, `column_no`, `seat_no`, `status`, `lock_id`, `del_flag`)
 SELECT
     400000 + r.`row_no` * 100 + c.`column_no`,
     2001,
@@ -268,7 +268,7 @@ SELECT
         ELSE 3003
     END,
     400000 + r.`row_no` * 100 + c.`column_no`,
-    IF(r.`row_no` <= 2, 'Front', 'Standard'),
+    IF(r.`row_no` <= 2, 40001, 40002),
     r.`row_no`,
     c.`column_no`,
     CONCAT(CHAR(64 + r.`row_no`), c.`column_no`),
@@ -282,7 +282,7 @@ ON DUPLICATE KEY UPDATE
     `show_id` = VALUES(`show_id`),
     `category_id` = VALUES(`category_id`),
     `seat_id` = VALUES(`seat_id`),
-    `area_name` = VALUES(`area_name`),
+    `area_id` = VALUES(`area_id`),
     `row_no` = VALUES(`row_no`),
     `column_no` = VALUES(`column_no`),
     `seat_no` = VALUES(`seat_no`),
@@ -293,13 +293,13 @@ ON DUPLICATE KEY UPDATE
 DELETE FROM `tmp_seed_rows` WHERE `row_no` > 4;
 DELETE FROM `tmp_seed_columns` WHERE `column_no` > 6;
 
-INSERT INTO `et_seat_stock` (`id`, `show_id`, `category_id`, `seat_id`, `area_name`, `row_no`, `column_no`, `seat_no`, `status`, `lock_id`, `del_flag`)
+INSERT INTO `et_seat_stock` (`id`, `show_id`, `category_id`, `seat_id`, `area_id`, `row_no`, `column_no`, `seat_no`, `status`, `lock_id`, `del_flag`)
 SELECT
     401000 + r.`row_no` * 100 + c.`column_no`,
     2002,
     3004,
     401000 + r.`row_no` * 100 + c.`column_no`,
-    IF(r.`row_no` <= 2, 'Front', 'Standard'),
+    IF(r.`row_no` <= 2, 40101, 40102),
     r.`row_no`,
     c.`column_no`,
     CONCAT(CHAR(64 + r.`row_no`), c.`column_no`),
@@ -313,7 +313,7 @@ ON DUPLICATE KEY UPDATE
     `show_id` = VALUES(`show_id`),
     `category_id` = VALUES(`category_id`),
     `seat_id` = VALUES(`seat_id`),
-    `area_name` = VALUES(`area_name`),
+    `area_id` = VALUES(`area_id`),
     `row_no` = VALUES(`row_no`),
     `column_no` = VALUES(`column_no`),
     `seat_no` = VALUES(`seat_no`),
