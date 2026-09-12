@@ -8,6 +8,7 @@ agent:
     name: ${AGENT_MODEL_NAME:default}
     connect-timeout: ${AGENT_MODEL_CONNECT_TIMEOUT:3s}
     read-timeout: ${AGENT_MODEL_READ_TIMEOUT:60s}
+    max-tool-rounds: ${AGENT_MODEL_MAX_TOOL_ROUNDS:3}
 
 spring:
   application:
