@@ -2,9 +2,11 @@ package com.wimone.enjoytix.agent.service;
 
 import com.wimone.enjoytix.agent.model.AgentConversation;
 import com.wimone.enjoytix.agent.model.AgentMessage;
+import com.wimone.enjoytix.agent.model.AgentRun;
 import com.wimone.enjoytix.agent.model.AgentStreamEvent;
 import com.wimone.enjoytix.framework.distributedid.core.IdGeneratorManager;
 import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -18,15 +20,26 @@ public class AgentApplicationService {
     private final AgentResponseGenerator generator;
     private final IdGeneratorManager ids;
     private final MeterRegistry meters;
+    private final RunRepository runs;
 
     public AgentApplicationService(ConversationRepository repository,
                                    AgentResponseGenerator generator,
                                    IdGeneratorManager ids,
                                    MeterRegistry meters) {
+        this(repository, generator, ids, meters, new InMemoryRunRepository());
+    }
+
+    @Autowired
+    public AgentApplicationService(ConversationRepository repository,
+                                   AgentResponseGenerator generator,
+                                   IdGeneratorManager ids,
+                                   MeterRegistry meters,
+                                   RunRepository runs) {
         this.repository = repository;
         this.generator = generator;
         this.ids = ids;
         this.meters = meters;
+        this.runs = runs;
     }
 
     public AgentConversation createConversation(Long userId) {
@@ -53,6 +66,9 @@ public class AgentApplicationService {
         if (question.isBlank()) {
             throw new IllegalArgumentException("Message content must not be blank");
         }
+        AgentRun run = runs.save(new AgentRun(ids.nextId(), id, userId, question,
+                AgentRun.Status.CREATED, Instant.now(), null, null)).start();
+        runs.save(run);
         repository.append(id, new AgentMessage("user", question, Instant.now()));
         long started = System.nanoTime();
         listener.onEvent(new AgentStreamEvent("conversation.started", id.toString()));
@@ -74,13 +90,17 @@ public class AgentApplicationService {
             }
             String result = answer.toString();
             repository.append(id, new AgentMessage("assistant", result, Instant.now()));
+            runs.save(run.complete(Instant.now()));
             meters.counter("enjoytix.agent.model.calls", "status", "success").increment();
             meters.counter("enjoytix.agent.model.tokens", "type", "output").increment(estimateTokens(result));
             listener.onEvent(new AgentStreamEvent("answer.completed", result));
         } catch (RuntimeException ex) {
             meters.counter("enjoytix.agent.model.calls", "status", "failure").increment();
             if (!listener.isCancelled()) {
+                runs.save(run.fail(Instant.now(), errorMessage(ex)));
                 listener.onEvent(new AgentStreamEvent("error", errorMessage(ex)));
+            } else {
+                runs.save(run.cancel(Instant.now()));
             }
         } finally {
             meters.timer("enjoytix.agent.model.duration")

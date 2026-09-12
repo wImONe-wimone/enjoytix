@@ -1,6 +1,9 @@
 server:
   port: 9070
 agent:
+  auth:
+    sa-token:
+      enabled: false
   model:
     enabled: false
     base-url: ${AGENT_MODEL_BASE_URL:http://127.0.0.1:8000}
