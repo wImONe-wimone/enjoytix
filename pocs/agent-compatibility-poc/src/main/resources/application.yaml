@@ -1,0 +1,11 @@
+spring:
+  main.web-application-type: servlet
+  ai:
+    openai.api-key: test-key
+    mcp.server:
+      enabled: true
+      name: enjoytix-agent-compatibility-poc
+      version: 0.0.1
+      type: SYNC
+      protocol: SSE
+sa-token.check-login: false
