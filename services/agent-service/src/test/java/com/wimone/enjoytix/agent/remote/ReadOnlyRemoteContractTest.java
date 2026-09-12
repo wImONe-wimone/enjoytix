@@ -8,7 +8,7 @@ import java.util.Arrays;
 import static org.assertj.core.api.Assertions.assertThat;
 class ReadOnlyRemoteContractTest {
  @Test void allAgentRemoteMethodsAreGetOnly() {
-  for (Class<?> type : new Class<?>[]{PerformanceRemoteService.class, TicketReadRemoteService.class, OrderReadRemoteService.class, UserReadRemoteService.class})
+  for (Class<?> type : new Class<?>[]{PerformanceRemoteService.class, TicketReadRemoteService.class, OrderReadRemoteService.class, UserReadRemoteService.class, CommentReadRemoteService.class})
    assertThat(Arrays.stream(type.getMethods()).filter(m -> m.getDeclaringClass()==type).allMatch(m -> m.isAnnotationPresent(GetMapping.class))).isTrue();
  }
  @Test void orderQueriesHaveNoClientSuppliedUserId() {

@@ -37,3 +37,6 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+order:
+  agent:
+    service-token: ${AGENT_SERVICE_TOKEN:}

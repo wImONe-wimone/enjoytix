@@ -1,6 +1,8 @@
 package com.wimone.enjoytix.agent.tool;
 
+import com.wimone.enjoytix.agent.remote.CommentReadRemoteService;
 import com.wimone.enjoytix.agent.remote.OrderReadRemoteService;
+import com.wimone.enjoytix.agent.remote.PerformanceRemoteService;
 import com.wimone.enjoytix.agent.remote.TicketReadRemoteService;
 import com.wimone.enjoytix.agent.remote.UserReadRemoteService;
 import org.junit.jupiter.api.Test;
@@ -49,7 +51,8 @@ class AgentToolSpringConfigurationTest {
             AgentToolRegistry registry = context.getBean(AgentToolRegistry.class);
             assertThat(registry.list()).extracting(AgentTool::name).containsExactlyInAnyOrder(
                     "get_ticket_availability", "get_seat_availability", "get_current_user",
-                    "list_current_user_orders", "get_current_user_order");
+                    "list_current_user_orders", "get_current_user_order", "get_performance_detail",
+                    "get_performance_rating_summary");
         }
     }
 
@@ -75,6 +78,16 @@ class AgentToolSpringConfigurationTest {
 
         @Bean
         OrderReadRemoteService orderReadRemoteService() {
+            return null;
+        }
+
+        @Bean
+        PerformanceRemoteService performanceRemoteService() {
+            return null;
+        }
+
+        @Bean
+        CommentReadRemoteService commentReadRemoteService() {
             return null;
         }
     }

@@ -1,6 +1,12 @@
 server:
   port: 9070
 agent:
+  service-token: ${AGENT_SERVICE_TOKEN:}
+  tool:
+    timeout: ${AGENT_TOOL_TIMEOUT:5s}
+    max-retries: ${AGENT_TOOL_MAX_RETRIES:1}
+    failure-threshold: ${AGENT_TOOL_FAILURE_THRESHOLD:3}
+    open-duration: ${AGENT_TOOL_OPEN_DURATION:30s}
   auth:
     sa-token:
       enabled: false

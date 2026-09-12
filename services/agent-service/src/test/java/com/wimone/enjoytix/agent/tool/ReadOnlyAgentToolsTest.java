@@ -2,18 +2,27 @@ package com.wimone.enjoytix.agent.tool;
 
 import com.wimone.enjoytix.agent.auth.AgentUserContext;
 import com.wimone.enjoytix.agent.auth.AgentUserContextHolder;
+import com.wimone.enjoytix.agent.remote.CommentReadRemoteService;
 import com.wimone.enjoytix.agent.remote.OrderReadRemoteService;
+import com.wimone.enjoytix.agent.remote.PerformanceRemoteService;
 import com.wimone.enjoytix.agent.remote.TicketReadRemoteService;
 import com.wimone.enjoytix.agent.remote.dto.CurrentUserResponse;
 import com.wimone.enjoytix.agent.remote.dto.OrderDetailResponse;
 import com.wimone.enjoytix.agent.remote.dto.OrderItemResponse;
+import com.wimone.enjoytix.agent.remote.dto.PerformanceDetailResponse;
+import com.wimone.enjoytix.agent.remote.dto.PerformancePageResponse;
+import com.wimone.enjoytix.agent.remote.dto.PerformanceRatingSummaryResponse;
 import com.wimone.enjoytix.agent.remote.dto.SeatAvailabilityResponse;
+import com.wimone.enjoytix.agent.remote.dto.ShowSessionResponse;
 import com.wimone.enjoytix.agent.remote.dto.TicketAvailabilityResponse;
+import com.wimone.enjoytix.framework.convention.page.PageResponse;
 import com.wimone.enjoytix.framework.convention.result.Result;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -69,6 +78,45 @@ class ReadOnlyAgentToolsTest {
 
         assertThat(result.success()).isTrue();
         assertThat(result.data()).isEqualTo(List.of(new SeatAvailabilityResponse(12L, 5L, 8L, 2L, 3, 4, "A-4", "AVAILABLE")));
+    }
+
+    @Test
+    void performanceDetailToolRequiresPositivePerformanceIdAndReturnsRemoteData() {
+        PerformanceDetailResponse detail = new PerformanceDetailResponse(3L, "Jazz Night", "Shanghai",
+                List.of(new ShowSessionResponse(12L, LocalDateTime.of(2026, 10, 1, 19, 30))));
+        PerformanceDetailQueryTool tool = new PerformanceDetailQueryTool(new PerformanceRemoteService() {
+            @Override
+            public Result<PageResponse<PerformancePageResponse.PerformanceSummary>> page(
+                    String title, LocalDate showDate, Integer status, long current, long size) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public Result<PerformanceDetailResponse> detail(Long performanceId) {
+                return Result.success(detail);
+            }
+        });
+
+        AgentToolResult invalid = tool.execute(new AgentToolRequest(Map.of("performanceId", "none")));
+        AgentToolResult result = tool.execute(new AgentToolRequest(Map.of("performanceId", 3L)));
+
+        assertThat(invalid.success()).isFalse();
+        assertThat(invalid.errorCode()).isEqualTo("INVALID_ARGUMENT");
+        assertThat(result.success()).isTrue();
+        assertThat(result.data()).isEqualTo(detail);
+    }
+
+    @Test
+    void performanceRatingSummaryToolReturnsAggregatedReviewData() {
+        PerformanceRatingSummaryResponse summary = new PerformanceRatingSummaryResponse(3L, 8,
+                new BigDecimal("4.50"), 0, 0, 1, 2, 5);
+        PerformanceRatingSummaryQueryTool tool = new PerformanceRatingSummaryQueryTool(performanceId -> Result.success(summary));
+
+        AgentToolResult result = tool.execute(new AgentToolRequest(Map.of("performanceId", "3")));
+
+        assertThat(tool.inputSchema().toString()).doesNotContain("userId");
+        assertThat(result.success()).isTrue();
+        assertThat(result.data()).isEqualTo(summary);
     }
 
     @Test
