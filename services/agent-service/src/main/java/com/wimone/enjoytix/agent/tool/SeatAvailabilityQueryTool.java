@@ -36,7 +36,7 @@ public class SeatAvailabilityQueryTool implements AgentTool {
     public AgentToolResult execute(AgentToolRequest request) {
         try {
             return ReadOnlyToolSupport.fromRemoteResult(
-                    ticketReadRemoteService.seats(ReadOnlyToolSupport.requirePositiveLong(request, "showId")),
+                    ticketReadRemoteService.seats(AgentToolInputContracts.ShowIdInput.from(request).showId()),
                     "Unable to query seat availability");
         } catch (IllegalArgumentException ex) {
             return AgentToolResult.failure("INVALID_ARGUMENT", ex.getMessage());

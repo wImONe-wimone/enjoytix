@@ -12,20 +12,51 @@ agent:
       enabled: false
   model:
     enabled: false
+    tool-calling-enabled: ${AGENT_TOOL_CALLING_ENABLED:false}
+    provider: ${AGENT_MODEL_PROVIDER:disabled}
     base-url: ${AGENT_MODEL_BASE_URL:http://127.0.0.1:8000}
     api-key: ${AGENT_MODEL_API_KEY:}
     name: ${AGENT_MODEL_NAME:default}
     connect-timeout: ${AGENT_MODEL_CONNECT_TIMEOUT:3s}
     read-timeout: ${AGENT_MODEL_READ_TIMEOUT:60s}
     max-tool-rounds: ${AGENT_MODEL_MAX_TOOL_ROUNDS:3}
+  knowledge:
+    chunk:
+      max-characters: ${AGENT_KNOWLEDGE_CHUNK_MAX_CHARACTERS:1200}
+      overlap-characters: ${AGENT_KNOWLEDGE_CHUNK_OVERLAP_CHARACTERS:120}
+    source:
+      max-bytes: ${AGENT_KNOWLEDGE_SOURCE_MAX_BYTES:20971520}
+      connect-timeout: ${AGENT_KNOWLEDGE_SOURCE_CONNECT_TIMEOUT:3s}
+      read-timeout: ${AGENT_KNOWLEDGE_SOURCE_READ_TIMEOUT:30s}
+      allowed-content-types: ${AGENT_KNOWLEDGE_SOURCE_ALLOWED_CONTENT_TYPES:text/plain,text/markdown,text/html,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document}
+    storage:
+      enabled: ${AGENT_KNOWLEDGE_STORAGE_ENABLED:false}
+      endpoint: ${AGENT_KNOWLEDGE_STORAGE_ENDPOINT:http://127.0.0.1:9000}
+      region: ${AGENT_KNOWLEDGE_STORAGE_REGION:us-east-1}
+      bucket: ${AGENT_KNOWLEDGE_STORAGE_BUCKET:enjoytix-knowledge}
+      access-key: ${AGENT_KNOWLEDGE_STORAGE_ACCESS_KEY:}
+      secret-key: ${AGENT_KNOWLEDGE_STORAGE_SECRET_KEY:}
+      path-style-access: ${AGENT_KNOWLEDGE_STORAGE_PATH_STYLE_ACCESS:true}
+      max-bytes: ${AGENT_KNOWLEDGE_STORAGE_MAX_BYTES:20971520}
 
 spring:
   application:
     name: enjoytix-agent-service
+  ai:
+    dashscope:
+      enabled: ${AGENT_MODEL_ENABLED:false}
+      api-key: ${AI_DASHSCOPE_API_KEY:}
+      agent:
+        enabled: ${AGENT_DASHSCOPE_AGENT_ENABLED:false}
+      chat:
+        options:
+          model: ${AGENT_MODEL_NAME:qwen-plus}
   mvc:
     problemdetails:
       enabled: true
   cloud:
+    compatibility-verifier:
+      enabled: false
     nacos:
       discovery:
         server-addr: 127.0.0.1:8848

@@ -1,10 +1,10 @@
 package com.wimone.enjoytix.agent.service;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConditionalOnProperty(name = "agent.model.enabled", havingValue = "false", matchIfMissing = true)
+@ConditionalOnExpression("'${agent.model.enabled:false}' != 'true' or '${agent.model.tool-calling-enabled:false}' != 'true'")
 public class DefaultAgentModelClient implements AgentModelClient {
     @Override
     public AgentModelResponse complete(AgentModelRequest request) {

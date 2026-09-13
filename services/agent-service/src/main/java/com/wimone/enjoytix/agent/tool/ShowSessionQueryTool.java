@@ -37,12 +37,10 @@ public class ShowSessionQueryTool implements AgentTool {
     @Override
     public AgentToolResult execute(AgentToolRequest request) {
         try {
-            String dateValue = request.stringValue("date");
-            LocalDate date = dateValue == null || dateValue.isBlank() ? null : LocalDate.parse(dateValue);
-            return AgentToolResult.success(queryService.query(
-                    request.stringValue("city"), date, request.stringValue("keyword")));
-        } catch (DateTimeParseException ex) {
-            return AgentToolResult.failure("INVALID_ARGUMENT", "date must use ISO-8601 format: yyyy-MM-dd");
+            AgentToolInputContracts.ShowSessionInput input = AgentToolInputContracts.ShowSessionInput.from(request);
+            return AgentToolResult.success(queryService.query(input.city(), input.date(), input.keyword()));
+        } catch (IllegalArgumentException ex) {
+            return AgentToolResult.failure("INVALID_ARGUMENT", ex.getMessage());
         } catch (RuntimeException ex) {
             return AgentToolResult.failure("TOOL_EXECUTION_FAILED", "Unable to query show sessions");
         }

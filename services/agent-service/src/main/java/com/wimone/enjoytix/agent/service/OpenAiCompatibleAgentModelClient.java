@@ -3,7 +3,7 @@ package com.wimone.enjoytix.agent.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 @Component
-@ConditionalOnProperty(name = "agent.model.enabled", havingValue = "true")
+@ConditionalOnExpression("'${agent.model.enabled:false}' == 'true' and '${agent.model.tool-calling-enabled:false}' == 'true' and '${agent.model.provider:disabled}' == 'openai'")
 public class OpenAiCompatibleAgentModelClient implements AgentModelClient {
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;

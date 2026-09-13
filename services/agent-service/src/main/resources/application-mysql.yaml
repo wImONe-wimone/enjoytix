@@ -1,0 +1,7 @@
+agent:
+  persistence:
+    mysql:
+      url: ${AGENT_MYSQL_URL:jdbc:mysql://127.0.0.1:3306/enjoytix_agent?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+      username: ${AGENT_MYSQL_USERNAME:root}
+      password: ${AGENT_MYSQL_PASSWORD:}
+      maximum-pool-size: ${AGENT_MYSQL_MAXIMUM_POOL_SIZE:8}

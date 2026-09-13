@@ -8,6 +8,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -16,7 +17,7 @@ public class InMemoryPurchaseDraftService implements PurchaseDraftService {
     private final Duration lifetime;
     private final TicketPurchaseQuoteService quoteService;
     private final Map<String, PurchaseDraft> drafts = new ConcurrentHashMap<>();
-    private final Map<String, String> confirmations = new ConcurrentHashMap<>();
+    private final Map<String, ConfirmationState> confirmations = new ConcurrentHashMap<>();
 
     public InMemoryPurchaseDraftService(Duration lifetime, TicketPurchaseQuoteService quoteService) {
         if (lifetime == null || lifetime.isZero() || lifetime.isNegative()) {
@@ -33,7 +34,7 @@ public class InMemoryPurchaseDraftService implements PurchaseDraftService {
         Instant expiresAt = Instant.now().plus(lifetime);
         PurchaseDraft draft = new PurchaseDraft(UUID.randomUUID().toString(), userId, request.showId(),
                 request.categoryId(), quote.seatIds(), request.quantity(), quote.unitPrice(),
-                quote.totalAmount(), fingerprint(request, quote), expiresAt);
+                quote.totalAmount(), fingerprint(userId, request, quote), expiresAt);
         drafts.put(draft.draftId(), draft);
         return draft;
     }
@@ -42,8 +43,13 @@ public class InMemoryPurchaseDraftService implements PurchaseDraftService {
     public PurchaseConfirmation issueConfirmation(String draftId) {
         PurchaseDraft draft = ownedDraft(draftId);
         if (expired(draft.expiresAt())) return new PurchaseConfirmation("", draftId, draft.expiresAt());
+        PurchaseDraftRequest request = new PurchaseDraftRequest(draft.showId(), draft.categoryId(), draft.seatIds(), draft.quantity());
+        PurchaseQuote quote = quoteService.quote(request);
+        if (!draft.parameterFingerprint().equals(fingerprint(draft.userId(), request, quote))) {
+            return new PurchaseConfirmation("", draftId, draft.expiresAt());
+        }
         String token = UUID.randomUUID().toString() + UUID.randomUUID();
-        confirmations.put(hash(token), draft.draftId());
+        confirmations.put(hash(token), new ConfirmationState(draft.draftId(), true, false));
         return new PurchaseConfirmation(token, draft.draftId(), draft.expiresAt());
     }
 
@@ -55,12 +61,16 @@ public class InMemoryPurchaseDraftService implements PurchaseDraftService {
             return false;
         }
         String tokenHash = hash(token);
-        PurchaseQuote quote = quoteService.quote(request);
-        if (!draft.parameterFingerprint().equals(fingerprint(request, quote))) {
-            confirmations.remove(tokenHash, draftId);
+        ConfirmationState state = confirmations.get(tokenHash);
+        if (state == null || !state.draftId().equals(draftId) || state.checked()) {
             return false;
         }
-        return confirmations.remove(tokenHash, draftId);
+        PurchaseQuote quote = quoteService.quote(request);
+        if (!draft.parameterFingerprint().equals(fingerprint(draft.userId(), request, quote))) {
+            confirmations.remove(tokenHash, state);
+            return false;
+        }
+        return confirmations.replace(tokenHash, state, state.checkedState());
     }
 
     @Override
@@ -70,7 +80,10 @@ public class InMemoryPurchaseDraftService implements PurchaseDraftService {
         if (draft == null || !draft.userId().equals(AgentUserContextHolder.requireCurrent().userId()) || expired(draft.expiresAt())) {
             throw new IllegalArgumentException("confirmation is invalid");
         }
-        if (!confirmations.remove(hash(token), draftId)) {
+        String tokenHash = hash(token);
+        ConfirmationState state = confirmations.get(tokenHash);
+        if (state == null || !state.draftId().equals(draftId) || !state.confirmed()
+                || !confirmations.remove(tokenHash, state)) {
             throw new IllegalArgumentException("confirmation is invalid");
         }
         return draft;
@@ -86,9 +99,11 @@ public class InMemoryPurchaseDraftService implements PurchaseDraftService {
 
     private boolean expired(Instant expiresAt) { return !Instant.now().isBefore(expiresAt); }
 
-    private String fingerprint(PurchaseDraftRequest request, PurchaseQuote quote) {
-        return hash(request.showId() + "|" + request.categoryId() + "|" + request.seatIds()
-                + "|" + request.quantity() + "|" + quote.unitPrice().stripTrailingZeros().toPlainString());
+    private String fingerprint(Long userId, PurchaseDraftRequest request, PurchaseQuote quote) {
+        List<Long> seatIds = quote.seatIds().stream().sorted().toList();
+        return hash(userId + "|" + request.showId() + "|" + request.categoryId() + "|" + seatIds
+                + "|" + request.quantity() + "|" + quote.unitPrice().stripTrailingZeros().toPlainString()
+                + "|" + quote.totalAmount().stripTrailingZeros().toPlainString());
     }
 
     private String hash(String value) {
@@ -97,6 +112,12 @@ public class InMemoryPurchaseDraftService implements PurchaseDraftService {
                     MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
         } catch (NoSuchAlgorithmException ex) {
             throw new IllegalStateException("SHA-256 is unavailable", ex);
+        }
+    }
+
+    private record ConfirmationState(String draftId, boolean confirmed, boolean checked) {
+        private ConfirmationState checkedState() {
+            return new ConfirmationState(draftId, confirmed, true);
         }
     }
 }

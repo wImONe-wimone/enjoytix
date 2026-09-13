@@ -2,6 +2,7 @@ package com.wimone.enjoytix.agent.service;
 
 import com.wimone.enjoytix.agent.model.AgentConversation;
 import com.wimone.enjoytix.agent.model.AgentMessage;
+import com.wimone.enjoytix.agent.model.AgentRun;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -10,13 +11,104 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import com.wimone.enjoytix.framework.distributedid.core.IdGeneratorManager;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 class AgentApplicationServiceTest {
+
+    @Test
+    void disabledToolCallingFlagUsesDeterministicResponseGenerator() {
+        FakeRepository repository = new FakeRepository();
+        AgentOrchestrator orchestrator = mock(AgentOrchestrator.class);
+        AgentApplicationService service = new AgentApplicationService(repository,
+                (conversationId, userId, content) -> "fallback:" + content,
+                new IdGeneratorManager(new com.wimone.enjoytix.framework.distributedid.core.SnowflakeIdGenerator(10)),
+                new SimpleMeterRegistry(), new InMemoryRunRepository(), orchestrator, false);
+
+        AgentConversation conversation = service.createConversation(7L);
+        var events = service.sendMessage(conversation.conversationId(), 7L, "question").toList();
+
+        assertThat(events.get(2).data()).isEqualTo("fallback:question");
+        org.mockito.Mockito.verifyNoInteractions(orchestrator);
+    }
+
+    @Test
+    void enabledToolCallingFlagUsesOrchestratorPath() {
+        FakeRepository repository = new FakeRepository();
+        AgentOrchestrator orchestrator = mock(AgentOrchestrator.class);
+        when(orchestrator.chat(eq("question"), anyString(), anyString()))
+                .thenReturn(new AgentChatResult("tool-answer", List.of("lookup")));
+        AtomicReference<Long> createdRunId = new AtomicReference<>();
+        RunRepository runs = new RunRepository() {
+            @Override
+            public com.wimone.enjoytix.agent.model.AgentRun save(com.wimone.enjoytix.agent.model.AgentRun run) {
+                createdRunId.compareAndSet(null, run.runId());
+                return run;
+            }
+
+            @Override
+            public com.wimone.enjoytix.agent.model.AgentRun find(Long runId) {
+                return null;
+            }
+        };
+        AgentApplicationService service = new AgentApplicationService(repository,
+                (conversationId, userId, content) -> "wrong-fallback",
+                new IdGeneratorManager(new com.wimone.enjoytix.framework.distributedid.core.SnowflakeIdGenerator(10)),
+                new SimpleMeterRegistry(), runs, orchestrator, true);
+
+        AgentConversation conversation = service.createConversation(7L);
+        var events = service.sendMessage(conversation.conversationId(), 7L, "question").toList();
+
+        assertThat(events.get(2).data()).isEqualTo("tool-answer");
+        verify(orchestrator).chat(eq("question"), eq(conversation.conversationId().toString()),
+                eq(createdRunId.get().toString()));
+    }
+
+    @Test
+    void reportsModelOutageWithoutSavingAnAssistantMessage() {
+        FakeRepository repository = new FakeRepository();
+        AgentOrchestrator orchestrator = mock(AgentOrchestrator.class);
+        when(orchestrator.chat(eq("question"), anyString(), anyString()))
+                .thenThrow(new AgentModelException("model unavailable"));
+        AtomicReference<AgentRun> latestRun = new AtomicReference<>();
+        RunRepository runs = new RunRepository() {
+            @Override
+            public AgentRun save(AgentRun run) {
+                latestRun.set(run);
+                return run;
+            }
+
+            @Override
+            public AgentRun find(Long runId) {
+                return latestRun.get();
+            }
+        };
+        AgentApplicationService service = new AgentApplicationService(repository,
+                (conversationId, userId, content) -> "wrong-fallback",
+                new IdGeneratorManager(new com.wimone.enjoytix.framework.distributedid.core.SnowflakeIdGenerator(10)),
+                new SimpleMeterRegistry(), runs, orchestrator, true);
+        AgentConversation conversation = service.createConversation(7L);
+
+        var events = service.sendMessage(conversation.conversationId(), 7L, "question").toList();
+
+        assertThat(events).extracting("type").containsExactly("conversation.started", "error");
+        assertThat(events.get(1).data()).isEqualTo("model unavailable");
+        assertThat(repository.find(conversation.conversationId()).messages())
+                .extracting(AgentMessage::content)
+                .containsExactly("question");
+        assertThat(latestRun.get())
+                .extracting(AgentRun::status, AgentRun::error)
+                .containsExactly(AgentRun.Status.FAILED, "model unavailable");
+    }
 
     @Test
     void createsConversationAndStreamsAssistantResponse() {

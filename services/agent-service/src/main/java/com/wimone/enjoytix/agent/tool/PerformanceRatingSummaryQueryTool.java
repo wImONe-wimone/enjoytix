@@ -36,7 +36,7 @@ public class PerformanceRatingSummaryQueryTool implements AgentTool {
     public AgentToolResult execute(AgentToolRequest request) {
         try {
             return ReadOnlyToolSupport.fromRemoteResult(
-                    commentReadRemoteService.ratingSummary(ReadOnlyToolSupport.requirePositiveLong(request, "performanceId")),
+                    commentReadRemoteService.ratingSummary(AgentToolInputContracts.PerformanceIdInput.from(request).performanceId()),
                     "Unable to query performance rating summary");
         } catch (IllegalArgumentException ex) {
             return AgentToolResult.failure("INVALID_ARGUMENT", ex.getMessage());

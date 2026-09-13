@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-09-13
+goal: 在 Spring Boot 3.x 稳定基线上，以独立 ai-service 实现单 Agent + Tool Calling，并为后续 Graph
+  Workflow 留出演进路径。

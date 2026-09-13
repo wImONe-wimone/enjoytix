@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/agent")
@@ -37,7 +38,8 @@ public class AgentChatController {
         AgentUserContext previous = AgentUserContextHolder.current();
         try {
             AgentUserContextHolder.set(user);
-            return Results.success(orchestrator.chat(messageRequest.content()));
+            return Results.success(orchestrator.chat(messageRequest.content(), messageRequest.conversationId(),
+                    UUID.randomUUID().toString()));
         } finally {
             if (previous == null) AgentUserContextHolder.clear(); else AgentUserContextHolder.set(previous);
         }

@@ -6,6 +6,8 @@ import com.wimone.enjoytix.agent.tool.AgentToolExecutor;
 import com.wimone.enjoytix.agent.tool.AgentToolRegistry;
 import com.wimone.enjoytix.agent.tool.AgentToolRequest;
 import com.wimone.enjoytix.agent.tool.AgentToolResult;
+import com.wimone.enjoytix.agent.tool.AgentToolExecutionContext;
+import com.wimone.enjoytix.agent.workflow.AgentWorkflowState;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -18,6 +20,7 @@ public class AgentOrchestrator {
     private final AgentToolRegistry toolRegistry;
     private final AgentToolExecutor toolExecutor;
     private final ObjectMapper objectMapper;
+    private final AgentAuthoritativeResponsePolicy responsePolicy;
     private final int maxIterations;
 
     public AgentOrchestrator(AgentModelClient modelClient, AgentToolRegistry toolRegistry,
@@ -27,34 +30,51 @@ public class AgentOrchestrator {
         this.toolRegistry = toolRegistry;
         this.toolExecutor = toolExecutor;
         this.objectMapper = objectMapper;
+        this.responsePolicy = new AgentAuthoritativeResponsePolicy(objectMapper);
         this.maxIterations = Math.max(1, maxIterations);
     }
 
     public AgentChatResult chat(String content) {
+        return chat(content, null, null);
+    }
+
+    public AgentChatResult chat(String content, String conversationId, String runId) {
         if (content == null || content.isBlank()) {
             throw new IllegalArgumentException("content must not be blank");
         }
-        List<AgentModelMessage> messages = new ArrayList<>(List.of(AgentModelMessage.user(content.trim())));
-        List<String> calledTools = new ArrayList<>();
+        AgentWorkflowState workflow = AgentWorkflowState.initial(conversationId, runId, content.trim());
+        List<AgentToolResult> toolResults = new ArrayList<>();
         for (int iteration = 0; iteration < maxIterations; iteration++) {
-            AgentModelResponse response = modelClient.complete(new AgentModelRequest(messages, toolDefinitions()));
+            AgentModelResponse response = modelClient.complete(new AgentModelRequest(workflow.messages(), toolDefinitions()));
             if (response == null) {
                 throw new AgentModelException("Agent model returned an empty response");
             }
             if (response.toolCalls().isEmpty()) {
-                return new AgentChatResult(response.content() == null ? "" : response.content(), calledTools);
+                List<String> calledTools = workflow.toolNames();
+                String answer = responsePolicy.answer(response.content(), calledTools, toolResults);
+                String confirmationResponse = confirmationResponse(answer, calledTools, toolResults);
+                return new AgentChatResult(answer, workflow.conversationId(), workflow.runId(), "COMPLETED",
+                        calledTools, confirmationResponse, workflow.toolResults());
             }
-            messages.add(AgentModelMessage.assistant(response.content(), response.toolCalls()));
+            workflow = workflow.appendAssistant(response.content(), response.toolCalls());
             for (AgentToolCall call : response.toolCalls()) {
                 if (call.name() == null || call.name().isBlank()) {
                     continue;
                 }
-                calledTools.add(call.name());
-                AgentToolResult result = toolExecutor.execute(call.name(), new AgentToolRequest(call.arguments()));
-                messages.add(AgentModelMessage.tool(call.name(), call.id(), serialize(result)));
+                AgentToolResult result = toolExecutor.execute(call.name(), new AgentToolRequest(call.arguments()),
+                        new AgentToolExecutionContext(workflow.conversationId(), workflow.runId()));
+                toolResults.add(result);
+                workflow = workflow.appendToolResult(call, result, serialize(result));
             }
         }
         throw new AgentModelException("Agent model exceeded maximum tool rounds");
+    }
+
+    private String confirmationResponse(String answer, List<String> calledTools, List<AgentToolResult> toolResults) {
+        for (int index = 0; index < calledTools.size() && index < toolResults.size(); index++) {
+            if ("create_order".equals(calledTools.get(index)) && !toolResults.get(index).success()) return answer;
+        }
+        return null;
     }
 
     private List<AgentModelToolDefinition> toolDefinitions() {

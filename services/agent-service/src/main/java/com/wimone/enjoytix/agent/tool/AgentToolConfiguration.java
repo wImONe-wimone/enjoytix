@@ -5,6 +5,7 @@ import com.wimone.enjoytix.agent.remote.OrderReadRemoteService;
 import com.wimone.enjoytix.agent.remote.PerformanceRemoteService;
 import com.wimone.enjoytix.agent.remote.TicketReadRemoteService;
 import com.wimone.enjoytix.agent.remote.UserReadRemoteService;
+import com.wimone.enjoytix.agent.trade.PurchaseOrderService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
@@ -70,5 +71,12 @@ public class AgentToolConfiguration {
     @ConditionalOnMissingBean(OrderDetailQueryTool.class)
     public OrderDetailQueryTool orderDetailQueryTool(OrderReadRemoteService orderReadRemoteService) {
         return new OrderDetailQueryTool(orderReadRemoteService);
+    }
+
+    @Bean
+    @ConditionalOnBean(PurchaseOrderService.class)
+    @ConditionalOnMissingBean(AgentOrderCreateTool.class)
+    public AgentOrderCreateTool agentOrderCreateTool(PurchaseOrderService purchaseOrderService) {
+        return new AgentOrderCreateTool(purchaseOrderService);
     }
 }

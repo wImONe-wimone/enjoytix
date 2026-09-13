@@ -12,6 +12,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.UUID;
 
 @Component
 public class RegistryAgentToolExecutor implements AgentToolExecutor {
@@ -36,10 +37,16 @@ public class RegistryAgentToolExecutor implements AgentToolExecutor {
 
     @Override
     public AgentToolResult execute(String toolName, AgentToolRequest request) {
+        return execute(toolName, request, new AgentToolExecutionContext(null, UUID.randomUUID().toString()));
+    }
+
+    @Override
+    public AgentToolResult execute(String toolName, AgentToolRequest request, AgentToolExecutionContext executionContext) {
+        if (executionContext == null) executionContext = new AgentToolExecutionContext(null, UUID.randomUUID().toString());
         long started = System.nanoTime();
         int attempts = 0;
         if (isOpen(toolName)) {
-            return finish(toolName, AgentToolResult.failure("TOOL_CIRCUIT_OPEN", "Agent tool temporarily unavailable"), started, attempts);
+            return finish(toolName, AgentToolResult.failure("TOOL_CIRCUIT_OPEN", "Agent tool temporarily unavailable"), started, attempts, executionContext);
         }
         AgentToolResult result;
         do {
@@ -47,14 +54,24 @@ public class RegistryAgentToolExecutor implements AgentToolExecutor {
             result = invokeWithTimeout(toolName, request);
         } while (isRetryable(result) && attempts <= properties.getMaxRetries());
         if (isRetryable(result)) recordFailure(toolName); else recordSuccess(toolName);
-        return finish(toolName, result, started, attempts);
+        return finish(toolName, result, started, attempts, executionContext);
     }
 
     private AgentToolResult invokeWithTimeout(String toolName, AgentToolRequest request) {
         try {
-            return CompletableFuture.supplyAsync(() -> registry.find(toolName)
-                            .map(tool -> tool.execute(request))
-                            .orElseGet(() -> AgentToolResult.failure("TOOL_NOT_FOUND", "Unknown agent tool: " + toolName)), executor)
+            var userContext = AgentUserContextHolder.current();
+            return CompletableFuture.supplyAsync(() -> {
+                        final AgentToolResult[] result = new AgentToolResult[1];
+                        Runnable action = () -> result[0] = registry.find(toolName)
+                                .map(tool -> tool.execute(request))
+                                .orElseGet(() -> AgentToolResult.failure("TOOL_NOT_FOUND", "Unknown agent tool: " + toolName));
+                        if (userContext == null) {
+                            action.run();
+                        } else {
+                            AgentUserContextHolder.runAs(userContext, action);
+                        }
+                        return result[0];
+                    }, executor)
                     .orTimeout(properties.getTimeout().toMillis(), TimeUnit.MILLISECONDS).join();
         } catch (RuntimeException ex) {
             if (ex.getCause() instanceof TimeoutException) return AgentToolResult.failure("TOOL_TIMEOUT", "Agent tool timed out");
@@ -79,16 +96,26 @@ public class RegistryAgentToolExecutor implements AgentToolExecutor {
         circuits.remove(toolName);
     }
 
-    private AgentToolResult finish(String toolName, AgentToolResult result, long started, int attempts) {
+    private AgentToolResult finish(String toolName, AgentToolResult result, long started, int attempts, AgentToolExecutionContext executionContext) {
         meters.counter("enjoytix.agent.tool.calls", "tool", toolName,
                 "status", result.success() ? "success" : "failure").increment();
         meters.timer("enjoytix.agent.tool.duration", "tool", toolName)
                 .record(System.nanoTime() - started, TimeUnit.NANOSECONDS);
         var context = AgentUserContextHolder.current();
-        auditSink.record(new AgentToolAuditEvent(toolName, context == null ? null : context.userId(),
-                result.success() ? "SUCCESS" : "FAILURE", result.errorCode(),
-                TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started), attempts));
+        auditSink.record(new AgentToolAuditEvent(toolName, context == null ? "anonymous" : "user:" + context.userId(),
+                executionContext.conversationId(), executionContext.runId(), result.success() ? "SUCCESS" : "FAILURE",
+                failureCategory(result.errorCode()), TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started), attempts));
         return result;
+    }
+
+    private String failureCategory(String errorCode) {
+        if (errorCode == null || errorCode.isBlank()) return null;
+        if ("TOOL_TIMEOUT".equals(errorCode)) return "TIMEOUT";
+        if ("TOOL_EXECUTION_FAILED".equals(errorCode)) return "EXECUTION";
+        if ("TOOL_CIRCUIT_OPEN".equals(errorCode)) return "CIRCUIT_OPEN";
+        if (errorCode.startsWith("AUTH") || errorCode.contains("UNAUTHORIZED")) return "AUTHORIZATION";
+        if (errorCode.startsWith("VALIDATION") || errorCode.contains("INVALID")) return "VALIDATION";
+        return "DOMAIN";
     }
 
     @PreDestroy

@@ -72,10 +72,29 @@ class AgentTradeSecurityFlowTest {
         when(remote.create(any())).thenReturn(com.wimone.enjoytix.framework.convention.result.Result.success(
                 new com.wimone.enjoytix.agent.remote.dto.AgentOrderCreateResponse(99L, "EO99", 5001L,
                         new BigDecimal("598.00"), "PENDING_PAYMENT", java.time.LocalDateTime.now().plusMinutes(15))));
+        assertThat(drafts.confirm(confirmation.token(), draft.draftId(), request())).isTrue();
         assertThat(service.create(draft.draftId(), confirmation.token())).isNotNull();
         assertThatThrownBy(() -> service.create(draft.draftId(), confirmation.token()))
                 .isInstanceOf(IllegalStateException.class);
         verify(remote, times(1)).create(any());
+    }
+
+    @Test
+    void rejectsOrderWhenInventoryChangesAfterQuote() {
+        InMemoryPurchaseDraftService drafts = new InMemoryPurchaseDraftService(Duration.ofMinutes(5), quoteService());
+        AgentOrderCreateRemoteService remote = mock(AgentOrderCreateRemoteService.class);
+        AgentUserContextHolder.set(new AgentUserContext(7L, "alice"));
+        PurchaseDraft draft = drafts.createDraft(request());
+        var confirmation = drafts.issueConfirmation(draft.draftId());
+        PurchaseOrderService service = new PurchaseOrderService(drafts, remote);
+        when(remote.create(any())).thenReturn(new com.wimone.enjoytix.framework.convention.result.Result<>(
+                "INVENTORY_CHANGED", "Seats are no longer available", null, null));
+
+        assertThat(drafts.confirm(confirmation.token(), draft.draftId(), request())).isTrue();
+        assertThatThrownBy(() -> service.create(draft.draftId(), confirmation.token()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("order creation failed");
+        verify(remote).create(any());
     }
 
     private PurchaseDraftRequest request() {

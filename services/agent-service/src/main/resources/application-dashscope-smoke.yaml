@@ -1,0 +1,14 @@
+agent:
+  model:
+    enabled: true
+    provider: dashscope
+    tool-calling-enabled: false
+
+spring:
+  ai:
+    dashscope:
+      enabled: true
+      api-key: ${AI_DASHSCOPE_API_KEY:}
+      chat:
+        options:
+          model: ${AI_DASHSCOPE_MODEL:qwen-plus}

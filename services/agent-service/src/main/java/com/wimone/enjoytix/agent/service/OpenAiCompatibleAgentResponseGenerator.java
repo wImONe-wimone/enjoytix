@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 import java.io.BufferedReader;
@@ -19,7 +20,7 @@ import java.util.Objects;
 import java.util.stream.Stream;
 
 @Component
-@ConditionalOnProperty(name = "agent.model.enabled", havingValue = "true")
+@ConditionalOnExpression("'${agent.model.enabled:false}' == 'true' and '${agent.model.tool-calling-enabled:false}' == 'true'")
 public class OpenAiCompatibleAgentResponseGenerator implements AgentResponseGenerator, StreamingAgentResponseGenerator {
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;

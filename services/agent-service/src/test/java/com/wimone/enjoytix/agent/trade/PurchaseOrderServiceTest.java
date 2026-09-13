@@ -77,6 +77,44 @@ class PurchaseOrderServiceTest {
         verify(remote).create(new AgentOrderCreateRequest(DRAFT, TOKEN, 21L, 5L, 2, List.of(101L, 102L)));
     }
 
+    @Test
+    void returnsOriginalOutcomeForRepeatedIdempotencyKeyWithoutCreatingSecondOrder() {
+        AgentUserContextHolder.set(new AgentUserContext(7L, ALICE));
+        PurchaseDraftService drafts = mock(PurchaseDraftService.class);
+        AgentOrderCreateRemoteService remote = mock(AgentOrderCreateRemoteService.class);
+        PurchaseDraft draft = draft();
+        when(drafts.consume(TOKEN, DRAFT)).thenReturn(draft);
+        AgentOrderCreateResponse response = new AgentOrderCreateResponse(99L, "EO99", 5001L,
+                new BigDecimal("598.00"), "PENDING_PAYMENT", LocalDateTime.now().plusMinutes(15));
+        when(remote.create(any())).thenReturn(Result.success(response));
+
+        PurchaseOrderService service = new PurchaseOrderService(drafts, remote);
+        assertThat(service.create(DRAFT, TOKEN, "request-1")).isEqualTo(response);
+        assertThat(service.create(DRAFT, TOKEN, "request-1")).isEqualTo(response);
+
+        verify(drafts, times(1)).consume(TOKEN, DRAFT);
+        verify(remote, times(1)).create(any());
+    }
+
+    @Test
+    void rejectsReuseOfIdempotencyKeyForDifferentRequest() {
+        AgentUserContextHolder.set(new AgentUserContext(7L, ALICE));
+        PurchaseDraftService drafts = mock(PurchaseDraftService.class);
+        AgentOrderCreateRemoteService remote = mock(AgentOrderCreateRemoteService.class);
+        PurchaseDraft draft = draft();
+        when(drafts.consume(anyString(), anyString())).thenReturn(draft);
+        when(remote.create(any())).thenReturn(Result.success(new AgentOrderCreateResponse(99L, "EO99", 5001L,
+                new BigDecimal("598.00"), "PENDING_PAYMENT", LocalDateTime.now().plusMinutes(15))));
+
+        PurchaseOrderService service = new PurchaseOrderService(drafts, remote);
+        service.create(DRAFT, TOKEN, "request-1");
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.create("another-draft", "another-token", "request-1"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("idempotency key is already used for another request");
+        verify(remote, times(1)).create(any());
+    }
+
     private PurchaseDraftRequest request() {
         return new PurchaseDraftRequest(21L, 5L, List.of(101L, 102L), 2);
     }

@@ -359,7 +359,7 @@ class PerformanceServiceImplTest {
         assertEquals(1, performanceService.adminShows(performance.performanceId()).size());
 
         ShowSessionCreateReqDTO createReq = new ShowSessionCreateReqDTO();
-        createReq.setShowTime(LocalDateTime.of(2026, 8, 18, 19, 30));
+        createReq.setShowTime(futureShowTime(2, 19, 30));
         createReq.setDurationMinutes(135);
         createReq.setStatus(1);
 
@@ -375,13 +375,14 @@ class PerformanceServiceImplTest {
         assertEquals(created.showId(), copiedCategories.get(0).showId());
 
         ShowSessionUpdateReqDTO updateReq = new ShowSessionUpdateReqDTO();
-        updateReq.setShowTime(LocalDateTime.of(2026, 8, 19, 20, 0));
+        LocalDateTime updatedShowTime = futureShowTime(3, 20, 0);
+        updateReq.setShowTime(updatedShowTime);
         updateReq.setDurationMinutes(150);
         updateReq.setStatus(0);
 
         ShowSessionRespDTO updated = performanceService.updateShow(performance.performanceId(), created.showId(), updateReq);
 
-        assertEquals(LocalDateTime.of(2026, 8, 19, 20, 0), updated.showTime());
+        assertEquals(updatedShowTime, updated.showTime());
         assertEquals(150, updated.durationMinutes());
         assertEquals(0, updated.status());
         assertThrows(ClientException.class, () -> performanceService.updateShow(1002L, created.showId(), updateReq));
@@ -442,7 +443,7 @@ class PerformanceServiceImplTest {
     @Test
     void createShowShouldPersistExplicitTicketCategorySeatConfig() {
         PerformanceDetailRespDTO performance = createPendingPerformance(200L, "Explicit Ticket Config Performance");
-        ShowSessionCreateReqDTO createReq = showReq(LocalDateTime.of(2026, 8, 17, 21, 0));
+        ShowSessionCreateReqDTO createReq = showReq(futureShowTime(1, 21, 0));
         TicketCategoryConfigReqDTO vipReq = ticketCategoryReq("Config VIP", "990.00", 2, 1, List.of(400101L, 400102L));
         vipReq.setSeatMapId(400L);
         createReq.setTicketCategories(List.of(
@@ -471,7 +472,7 @@ class PerformanceServiceImplTest {
     @Test
     void createShowShouldRejectTicketCategorySeatMapMismatch() {
         PerformanceDetailRespDTO performance = createPendingPerformance(200L, "Seat Map Mismatch Performance");
-        ShowSessionCreateReqDTO createReq = showReq(LocalDateTime.of(2026, 8, 18, 21, 0));
+        ShowSessionCreateReqDTO createReq = showReq(futureShowTime(1, 21, 0));
         TicketCategoryConfigReqDTO vipReq = ticketCategoryReq("Config VIP", "990.00", 1, 1, List.of(400101L));
         vipReq.setSeatMapId(401L);
         createReq.setTicketCategories(List.of(vipReq));
@@ -743,6 +744,15 @@ class PerformanceServiceImplTest {
         return request;
     }
 
+    private LocalDateTime futureShowTime(int daysFromNow, int hour, int minute) {
+        return LocalDateTime.now()
+                .plusDays(daysFromNow)
+                .withHour(hour)
+                .withMinute(minute)
+                .withSecond(0)
+                .withNano(0);
+    }
+
     private TicketCategoryConfigReqDTO ticketCategoryReq(String name, String price, int totalStock, int seatSelectable, List<Long> seatIds) {
         TicketCategoryConfigReqDTO request = new TicketCategoryConfigReqDTO();
         request.setCategoryName(name);
@@ -770,7 +780,7 @@ class PerformanceServiceImplTest {
         performanceReq.setArtistId(100L);
         performanceReq.setVenueId(venueId);
 
-        ShowSessionCreateReqDTO showReq = showReq(LocalDateTime.of(2026, 8, 17, 19, 30));
+        ShowSessionCreateReqDTO showReq = showReq(futureShowTime(1, 19, 30));
         TicketCategoryConfigReqDTO vipReq = ticketCategoryReq("Copy VIP", "990.00", 2, 1, List.of(400101L, 400102L));
         vipReq.setSeatMapId(400L);
         showReq.setTicketCategories(List.of(

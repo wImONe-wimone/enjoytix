@@ -7,6 +7,7 @@ import com.wimone.enjoytix.agent.model.AgentStreamEvent;
 import com.wimone.enjoytix.framework.distributedid.core.IdGeneratorManager;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
@@ -21,6 +22,8 @@ public class AgentApplicationService {
     private final IdGeneratorManager ids;
     private final MeterRegistry meters;
     private final RunRepository runs;
+    private final AgentOrchestrator orchestrator;
+    private final boolean toolCallingEnabled;
 
     public AgentApplicationService(ConversationRepository repository,
                                    AgentResponseGenerator generator,
@@ -35,11 +38,23 @@ public class AgentApplicationService {
                                    IdGeneratorManager ids,
                                    MeterRegistry meters,
                                    RunRepository runs) {
+        this(repository, generator, ids, meters, runs, null, false);
+    }
+
+    public AgentApplicationService(ConversationRepository repository,
+                                   AgentResponseGenerator generator,
+                                   IdGeneratorManager ids,
+                                   MeterRegistry meters,
+                                   RunRepository runs,
+                                   AgentOrchestrator orchestrator,
+                                   @Value("${agent.model.tool-calling-enabled:false}") boolean toolCallingEnabled) {
         this.repository = repository;
         this.generator = generator;
         this.ids = ids;
         this.meters = meters;
         this.runs = runs;
+        this.orchestrator = orchestrator;
+        this.toolCallingEnabled = toolCallingEnabled;
     }
 
     public AgentConversation createConversation(Long userId) {
@@ -73,7 +88,7 @@ public class AgentApplicationService {
         long started = System.nanoTime();
         listener.onEvent(new AgentStreamEvent("conversation.started", id.toString()));
         StringBuilder answer = new StringBuilder();
-        try (Stream<String> chunks = generator.generateStream(id, userId, question)) {
+        try (Stream<String> chunks = responseStream(id, userId, run.runId().toString(), question)) {
             var iterator = chunks.iterator();
             while (!listener.isCancelled() && iterator.hasNext()) {
                 String chunk = iterator.next();
@@ -106,6 +121,16 @@ public class AgentApplicationService {
             meters.timer("enjoytix.agent.model.duration")
                     .record(System.nanoTime() - started, java.util.concurrent.TimeUnit.NANOSECONDS);
         }
+    }
+
+    private Stream<String> responseStream(Long conversationId, Long userId, String runId, String question) {
+        if (toolCallingEnabled) {
+            if (orchestrator == null) {
+                throw new AgentModelException("Agent tool-calling path is not configured");
+            }
+            return Stream.of(orchestrator.chat(question, conversationId.toString(), runId).answer());
+        }
+        return generator.generateStream(conversationId, userId, question);
     }
 
     private long estimateTokens(String text) {

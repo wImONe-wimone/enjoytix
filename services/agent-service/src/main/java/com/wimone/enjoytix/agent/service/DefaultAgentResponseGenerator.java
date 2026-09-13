@@ -1,12 +1,12 @@
 package com.wimone.enjoytix.agent.service;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
 import java.util.stream.Stream;
 
 @Component
-@ConditionalOnProperty(name = "agent.model.enabled", havingValue = "false", matchIfMissing = true)
+@ConditionalOnExpression("'${agent.model.enabled:false}' != 'true' or '${agent.model.tool-calling-enabled:false}' != 'true'")
 public class DefaultAgentResponseGenerator implements AgentResponseGenerator, StreamingAgentResponseGenerator {
     @Override
     public String generate(Long conversationId, Long userId, String content) {

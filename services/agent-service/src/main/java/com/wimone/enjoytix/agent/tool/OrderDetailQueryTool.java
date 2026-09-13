@@ -42,7 +42,7 @@ public class OrderDetailQueryTool implements AgentTool {
         try {
             AgentUserContext context = AgentUserContextHolder.requireCurrent();
             Result<OrderDetailResponse> result = orderReadRemoteService.detail(
-                    ReadOnlyToolSupport.requirePositiveLong(request, "orderId"));
+                    AgentToolInputContracts.OrderIdInput.from(request).orderId());
             if (result == null || !result.isSuccess()) {
                 return AgentToolResult.failure("TOOL_EXECUTION_FAILED", "Unable to query order");
             }

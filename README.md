@@ -89,6 +89,102 @@ Swagger UI：
 http://localhost:9000/swagger-ui.html
 ```
 
+## Agent Service: Spring AI Alibaba
+
+`agent-service` keeps `AgentModelClient` as the application boundary. The DashScope adapter uses Spring AI Alibaba for model invocation and tool calling, while the application owns orchestration, safety policy, and API contracts. Model invocation is disabled by default, so a new developer does not need provider credentials to run the service.
+
+### Start without provider credentials
+
+The default mode uses in-memory conversation and run repositories. In PowerShell, build and start the service with Nacos and model invocation explicitly disabled:
+
+```powershell
+mvn -pl services/agent-service -am -DskipTests package
+java -jar services/agent-service/target/enjoytix-agent-service-0.1.0-SNAPSHOT.jar `
+  --server.port=9070 `
+  --spring.cloud.nacos.discovery.enabled=false `
+  --spring.cloud.nacos.config.enabled=false `
+  --agent.model.enabled=false `
+  --agent.model.tool-calling-enabled=false
+```
+
+Then check `http://127.0.0.1:9070/actuator/health`; it must report `UP`. This deterministic fallback never requires or sends `AI_DASHSCOPE_API_KEY` or `AGENT_MODEL_API_KEY`.
+
+### Optional infrastructure
+
+| Scenario | Required component | Configuration |
+| --- | --- | --- |
+| Local credential-free startup | None | Use the command above |
+| Persistent conversations and runs | MySQL 8 | Set `SPRING_PROFILES_ACTIVE=mysql` and `AGENT_MYSQL_*` |
+| Service discovery and gateway integration | Nacos | Set `SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR`; keep discovery enabled |
+| DashScope model and tool calling | DashScope credentials | Enable the model as described below |
+
+MySQL mode does not need provider credentials:
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE = "mysql"
+$env:AGENT_MYSQL_URL = "jdbc:mysql://127.0.0.1:3306/enjoytix_agent?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC"
+$env:AGENT_MYSQL_USERNAME = "root"
+$env:AGENT_MYSQL_PASSWORD = "<local-password>"
+$env:SPRING_CLOUD_NACOS_DISCOVERY_ENABLED = "false"
+$env:SPRING_CLOUD_NACOS_CONFIG_ENABLED = "false"
+mvn -pl services/agent-service spring-boot:run
+```
+
+The `mysql` profile creates the Agent tables. Use a dedicated least-privileged database account in production. Nacos defaults to `127.0.0.1:8848`; start it only when service registration is needed.
+
+### DashScope configuration and rollback
+
+Use `deploy/agent-service/agent-service.env.example` as the non-secret deployment template. Put its values into the deployment platform or secret manager: Spring Boot does not load that file automatically, and it must never contain real credentials in source control.
+
+Enable DashScope tool calling only after the API key is injected through the deployment secret manager:
+
+```powershell
+$env:AGENT_MODEL_ENABLED = "true"
+$env:AGENT_TOOL_CALLING_ENABLED = "true"
+$env:AGENT_MODEL_PROVIDER = "dashscope"
+$env:AGENT_MODEL_NAME = "qwen-plus"
+$env:AI_DASHSCOPE_API_KEY = "<dashscope-api-key>"
+$env:AGENT_DASHSCOPE_AGENT_ENABLED = "false"
+mvn -pl services/agent-service spring-boot:run
+```
+
+`AGENT_DASHSCOPE_AGENT_ENABLED` must remain `false`: the application owns the allowlisted tool loop instead of delegating tool execution to a provider agent. `application-dashscope-smoke.yaml` is only for an explicit provider smoke test; the default Maven test lifecycle skips it when credentials are absent.
+
+For provider outage, cost, or security rollback, set the following feature flags and restart. Existing HTTP and purchase APIs remain available through the deterministic fallback:
+
+```text
+AGENT_MODEL_ENABLED=false
+AGENT_TOOL_CALLING_ENABLED=false
+AGENT_MODEL_PROVIDER=disabled
+AGENT_DASHSCOPE_AGENT_ENABLED=false
+```
+
+### Environment variables
+
+The complete non-secret template is `deploy/agent-service/agent-service.env.example`.
+
+| Group | Variables | Purpose |
+| --- | --- | --- |
+| Nacos | `SPRING_CLOUD_NACOS_DISCOVERY_ENABLED`, `SPRING_CLOUD_NACOS_CONFIG_ENABLED`, `SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR` | Disable both flags for local standalone startup; configure the server address when registration is required |
+| Model flags | `AGENT_MODEL_ENABLED`, `AGENT_TOOL_CALLING_ENABLED`, `AGENT_MODEL_PROVIDER`, `AGENT_DASHSCOPE_AGENT_ENABLED` | All are disabled or provider-neutral by default |
+| Provider | `AI_DASHSCOPE_API_KEY`, `AGENT_MODEL_API_KEY`, `AGENT_MODEL_NAME`, `AGENT_MODEL_BASE_URL` | Inject keys only through a secret manager; `qwen-plus` is a DashScope example |
+| Model bounds | `AGENT_MODEL_CONNECT_TIMEOUT`, `AGENT_MODEL_READ_TIMEOUT`, `AGENT_MODEL_MAX_TOOL_ROUNDS` | Provider latency and per-request tool-round limits |
+| Tool bounds | `AGENT_TOOL_TIMEOUT`, `AGENT_TOOL_MAX_RETRIES`, `AGENT_TOOL_FAILURE_THRESHOLD`, `AGENT_TOOL_OPEN_DURATION` | Timeout, retry, and circuit-breaker controls |
+| MySQL | `AGENT_MYSQL_URL`, `AGENT_MYSQL_USERNAME`, `AGENT_MYSQL_PASSWORD`, `AGENT_MYSQL_MAXIMUM_POOL_SIZE` | Used only by the `mysql` profile |
+| Knowledge storage | `AGENT_KNOWLEDGE_STORAGE_*` and `AGENT_KNOWLEDGE_SOURCE_*` | Disabled by default; store access keys as secrets |
+
+### Tool safety rules
+
+- Only tools registered in `AgentToolRegistry` are callable; unknown tool names fail and prompts cannot add capabilities.
+- Performance, session, ticket, seat, and order query results come from authoritative business services. Model text cannot override price, inventory, or order state.
+- User identity, order ownership, and draft ownership come from authenticated context. User-scoped tools reject any model-supplied `userId`.
+- Order creation is an explicit side-effecting tool. It requires a current-user draft, an unexpired confirmation token whose quote still matches authority, and a user-scoped idempotency key. Confirmation tokens are consumed once.
+- Tool calls are subject to timeout, bounded retry, and circuit breaking. Audits record subject, conversation/run identifiers, tool name, outcome, latency, and failure category; never log API keys, authorization headers, payment data, or raw provider exceptions.
+
+### Future Graph boundary
+
+The initial implementation uses an application-owned `AgentOrchestrator`, workflow state, and node-oriented tool results. A future Spring AI Alibaba Graph integration may replace only that orchestration boundary. Controllers, domain services, API DTOs, and `AgentChatResult` must not expose Spring AI or Graph-specific types. Purchase confirmation, quote expiry, idempotency, and audit policy remain application-owned.
+
 ## 配置说明
 
 - 默认 profile：使用内存仓储，适合快速测试和本地开发。

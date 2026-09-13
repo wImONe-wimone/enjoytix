@@ -36,7 +36,7 @@ public class PerformanceDetailQueryTool implements AgentTool {
     public AgentToolResult execute(AgentToolRequest request) {
         try {
             return ReadOnlyToolSupport.fromRemoteResult(
-                    performanceRemoteService.detail(ReadOnlyToolSupport.requirePositiveLong(request, "performanceId")),
+                    performanceRemoteService.detail(AgentToolInputContracts.PerformanceIdInput.from(request).performanceId()),
                     "Unable to query performance detail");
         } catch (IllegalArgumentException ex) {
             return AgentToolResult.failure("INVALID_ARGUMENT", ex.getMessage());
