@@ -6,6 +6,8 @@ import com.wimone.enjoytix.agent.model.AgentRun;
 import com.wimone.enjoytix.agent.model.AgentStreamEvent;
 import com.wimone.enjoytix.framework.distributedid.core.IdGeneratorManager;
 import io.micrometer.core.instrument.MeterRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -17,6 +19,8 @@ import java.util.stream.Stream;
 
 @Service
 public class AgentApplicationService {
+    private static final Logger log = LoggerFactory.getLogger(AgentApplicationService.class);
+
     private final ConversationRepository repository;
     private final AgentResponseGenerator generator;
     private final IdGeneratorManager ids;
@@ -24,6 +28,7 @@ public class AgentApplicationService {
     private final RunRepository runs;
     private final AgentOrchestrator orchestrator;
     private final boolean toolCallingEnabled;
+    private final AgentModelErrorClassifier modelErrorClassifier = new AgentModelErrorClassifier();
 
     public AgentApplicationService(ConversationRepository repository,
                                    AgentResponseGenerator generator,
@@ -110,10 +115,14 @@ public class AgentApplicationService {
             meters.counter("enjoytix.agent.model.tokens", "type", "output").increment(estimateTokens(result));
             listener.onEvent(new AgentStreamEvent("answer.completed", result));
         } catch (RuntimeException ex) {
-            meters.counter("enjoytix.agent.model.calls", "status", "failure").increment();
+            AgentModelFailure failure = modelErrorClassifier.classify(ex);
+            meters.counter("enjoytix.agent.model.calls", "status", "failure",
+                    "category", failure.category().name()).increment();
+            log.warn("Agent model invocation failed: conversationId={}, runId={}, category={}",
+                    id, run.runId(), failure.category());
             if (!listener.isCancelled()) {
-                runs.save(run.fail(Instant.now(), errorMessage(ex)));
-                listener.onEvent(new AgentStreamEvent("error", errorMessage(ex)));
+                runs.save(run.fail(Instant.now(), failure.safeMessage()));
+                listener.onEvent(new AgentStreamEvent("error", failure.safeMessage()));
             } else {
                 runs.save(run.cancel(Instant.now()));
             }
@@ -135,10 +144,6 @@ public class AgentApplicationService {
 
     private long estimateTokens(String text) {
         return Math.max(1, (text.length() + 3) / 4);
-    }
-
-    private String errorMessage(RuntimeException ex) {
-        return ex.getMessage() == null ? "Model generation failed" : ex.getMessage();
     }
 
     private AgentConversation requireConversation(Long id) {

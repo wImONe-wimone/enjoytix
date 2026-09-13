@@ -78,7 +78,7 @@ class AgentApplicationServiceTest {
         FakeRepository repository = new FakeRepository();
         AgentOrchestrator orchestrator = mock(AgentOrchestrator.class);
         when(orchestrator.chat(eq("question"), anyString(), anyString()))
-                .thenThrow(new AgentModelException("model unavailable"));
+                .thenThrow(new AgentModelException("api-key=secret-value"));
         AtomicReference<AgentRun> latestRun = new AtomicReference<>();
         RunRepository runs = new RunRepository() {
             @Override
@@ -92,22 +92,28 @@ class AgentApplicationServiceTest {
                 return latestRun.get();
             }
         };
+        SimpleMeterRegistry meters = new SimpleMeterRegistry();
         AgentApplicationService service = new AgentApplicationService(repository,
                 (conversationId, userId, content) -> "wrong-fallback",
                 new IdGeneratorManager(new com.wimone.enjoytix.framework.distributedid.core.SnowflakeIdGenerator(10)),
-                new SimpleMeterRegistry(), runs, orchestrator, true);
+                meters, runs, orchestrator, true);
         AgentConversation conversation = service.createConversation(7L);
 
         var events = service.sendMessage(conversation.conversationId(), 7L, "question").toList();
 
         assertThat(events).extracting("type").containsExactly("conversation.started", "error");
-        assertThat(events.get(1).data()).isEqualTo("model unavailable");
+        assertThat(events.get(1).data()).isEqualTo("The assistant is temporarily unavailable. Please try again.");
+        assertThat(events.get(1).data()).doesNotContain("secret-value");
         assertThat(repository.find(conversation.conversationId()).messages())
                 .extracting(AgentMessage::content)
                 .containsExactly("question");
         assertThat(latestRun.get())
                 .extracting(AgentRun::status, AgentRun::error)
-                .containsExactly(AgentRun.Status.FAILED, "model unavailable");
+                .containsExactly(AgentRun.Status.FAILED, "The assistant is temporarily unavailable. Please try again.");
+        assertThat(meters.get("enjoytix.agent.model.calls")
+                .tag("status", "failure")
+                .tag("category", "PROVIDER_ERROR")
+                .counter().count()).isEqualTo(1);
     }
 
     @Test

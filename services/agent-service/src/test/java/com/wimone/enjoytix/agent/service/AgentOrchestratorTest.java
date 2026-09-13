@@ -15,8 +15,25 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AgentOrchestratorTest {
+
+    @Test
+    void stopsAfterConfiguredToolRoundLimit() {
+        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+        AgentModelClient model = request -> {
+            calls.incrementAndGet();
+            return AgentModelResponse.toolCalls(List.of(new AgentToolCall(null, null, Map.of())));
+        };
+        AgentOrchestrator orchestrator = new AgentOrchestrator(model, new InMemoryAgentToolRegistry(),
+                (toolName, request) -> null, new ObjectMapper(), 2);
+
+        assertThatThrownBy(() -> orchestrator.chat(String.valueOf(1)))
+                .isInstanceOf(AgentModelException.class)
+                .hasMessageContaining("maximum tool rounds");
+        assertThat(calls).hasValue(2);
+    }
 
     @Test
     void identifiesIntentCallsShowSessionToolAndSummarizesAnswer() {

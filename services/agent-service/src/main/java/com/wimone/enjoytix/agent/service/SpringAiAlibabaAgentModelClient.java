@@ -8,7 +8,7 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.messages.UserMessage;
-import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
@@ -21,11 +21,11 @@ import java.util.Map;
 @Component
 @ConditionalOnExpression("'${agent.model.enabled:false}' == 'true' and '${agent.model.tool-calling-enabled:false}' == 'true' and '${agent.model.provider:disabled}' == 'dashscope'")
 public class SpringAiAlibabaAgentModelClient implements AgentModelClient {
-    private final ChatModel chatModel;
+    private final ChatClient chatClient;
     private final ObjectMapper objectMapper;
 
-    public SpringAiAlibabaAgentModelClient(ChatModel chatModel, ObjectMapper objectMapper) {
-        this.chatModel = chatModel;
+    public SpringAiAlibabaAgentModelClient(ChatClient chatClient, ObjectMapper objectMapper) {
+        this.chatClient = chatClient;
         this.objectMapper = objectMapper;
     }
 
@@ -38,7 +38,7 @@ public class SpringAiAlibabaAgentModelClient implements AgentModelClient {
                     .toolChoice("auto")
                     .internalToolExecutionEnabled(false)
                     .build();
-            ChatResponse response = chatModel.call(new Prompt(messages, options));
+            ChatResponse response = chatClient.prompt(new Prompt(messages, options)).call().chatResponse();
             if (response == null || response.getResult() == null || response.getResult().getOutput() == null) {
                 throw new AgentModelException("Agent model returned an empty response");
             }

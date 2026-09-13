@@ -1,16 +1,16 @@
 ﻿## 1. Baseline and dependency alignment
 
-- [ ] 1.1 Record the current reactor build, agent-service tests, and MVP flow test results; verify the baseline commands and failures are documented.
+- [x] 1.1 Record the current reactor build, agent-service tests, and MVP flow test results; verify the baseline commands and failures are documented.
 - [x] 1.2 Inspect Spring Boot/Spring Cloud Alibaba compatibility and pin the selected Spring AI Alibaba 1.1.2.2 / Spring AI 1.1.2 versions in `dependencies/pom.xml`; verify Maven dependency convergence.
-- [ ] 1.3 Upgrade the root and service parent Spring Boot/Cloud versions to the selected Boot 3.5.x line without changing public APIs; verify `mvn -DskipTests compile` succeeds for the full reactor.
+- [x] 1.3 Upgrade the root and service parent Spring Boot/Cloud versions to the selected Boot 3.5.x line without changing public APIs; verify `mvn -DskipTests compile` succeeds for the full reactor.
 - [x] 1.4 Add the Spring AI Alibaba model starter and required Spring AI core dependencies to `services/agent-service/pom.xml`; verify the dependency tree contains one aligned version of each Spring AI artifact.
 
 ## 2. Spring AI model and configuration adapter
 
 - [x] 2.1 Add provider-neutral model properties, feature flags, timeouts, and tool-round limits to `services/agent-service/src/main/resources/application.yaml`; verify disabled mode starts without an API key.
-- [ ] 2.2 Implement a Spring AI `ChatClient` configuration and adapter behind the existing `AgentModelClient` application boundary; verify adapter unit tests cover normal response, timeout, provider error, and round-limit behavior.
+- [x] 2.2 Implement a Spring AI `ChatClient` configuration and adapter behind the existing `AgentModelClient` application boundary; verify adapter unit tests cover normal response, timeout, provider error, and round-limit behavior.
 - [x] 2.3 Migrate system prompt, conversation message mapping, and response mapping without exposing provider-specific types through `AgentChatResult`; verify existing controller contract tests remain compatible.
-- [ ] 2.4 Add model invocation metrics, correlation identifiers, and sanitized error classification; verify tests assert secrets and raw provider stack traces are absent from API responses and audit events.
+- [x] 2.4 Add model invocation metrics, correlation identifiers, and sanitized error classification; verify tests assert secrets and raw provider stack traces are absent from API responses and audit events.
 
 ## 3. Typed ticketing tools
 

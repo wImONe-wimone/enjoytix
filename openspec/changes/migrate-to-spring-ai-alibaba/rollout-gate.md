@@ -13,7 +13,7 @@ accepted by the release owner.
 | Area | Result | Evidence |
 | --- | --- | --- |
 | Dependency alignment | Pass with release risk | `spring-ai-alibaba-starter-dashscope:1.1.2.2` resolves Spring AI artifacts at `1.1.2`; the selected Spring AI Alibaba and Spring AI POM metadata declares Apache-2.0. |
-| Nacos dependencies | Blocking risk | The agent resolves both Nacos starters at `2022.0.0.0-RC2`, matching the current `spring-cloud-alibaba.version` property but retaining a release-candidate dependency. |
+| Nacos dependencies | Pass with operational verification required | The selected Spring Cloud Alibaba/Nacos train is the GA release `2025.0.0.0`; service registration must still be verified against the target Nacos environment before rollout. |
 | Source and configuration secrets | Pass | `git diff --check` passes; a high-confidence tracked-file secret scan finds no private keys or known API-key formats. Agent credentials remain empty environment-variable placeholders. |
 | Safe defaults | Pass | Model and tool calling are disabled by default; the credential-free Agent JAR health check passes with Nacos disabled. |
 | Regression | Pass | `mvn -pl services/agent-service -am test` and `mvn -pl tests/mvp-flow-test -am test` pass on the review date. |
@@ -30,15 +30,13 @@ report.
 
 ## Required actions before production
 
-1. Replace the `2022.0.0.0-RC2` Spring Cloud Alibaba/Nacos train with an approved
-   compatible GA release, or obtain a documented production-risk acceptance.
-2. Add a CI vulnerability and SBOM scan using a maintained advisory database; fail
+1. Add a CI vulnerability and SBOM scan using a maintained advisory database; fail
    release on unapproved high- or critical-severity findings and archive its report.
-3. Resolve or explicitly waive each `dependency:analyze` finding with the service
+2. Resolve or explicitly waive each `dependency:analyze` finding with the service
    owner, avoiding accidental reliance on transitive dependencies.
-4. Close the remaining unchecked OpenSpec tasks (`1.1`, `1.3`, `2.2`, and `2.4`)
-   before treating the overall migration as complete.
-5. Keep `AGENT_MODEL_ENABLED=false` until DashScope credentials, observability,
+3. Verify Nacos registration and configuration loading against the target environment
+   using the approved GA train, then retain the startup and health-check evidence.
+4. Keep `AGENT_MODEL_ENABLED=false` until DashScope credentials, observability,
    tool auditing, and the feature-flag rollback procedure have been reviewed in
    the target environment.
 
