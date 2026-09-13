@@ -1,8 +1,12 @@
 package com.wimone.enjoytix.agent.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.wimone.enjoytix.agent.knowledge.embedding.EmbeddingPort;
+import com.wimone.enjoytix.agent.knowledge.persistence.MySqlKnowledgeVectorStore;
 import com.zaxxer.hikari.HikariDataSource;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -47,8 +51,18 @@ public class MySqlPersistenceConfiguration {
     }
 
     @Bean
+    @ConditionalOnBean(EmbeddingPort.class)
+    public MySqlKnowledgeVectorStore knowledgeVectorStore(JdbcTemplate agentJdbcTemplate,
+                                                          EmbeddingPort embeddingPort,
+                                                          ObjectMapper objectMapper) {
+        return new MySqlKnowledgeVectorStore(agentJdbcTemplate, embeddingPort, objectMapper);
+    }
+
+    @Bean
     public InitializingBean agentMySqlSchemaInitializer(DataSource agentDataSource) {
-        return () -> new ResourceDatabasePopulator(new ClassPathResource("db/migration/V2__agent_mysql.sql"))
+        return () -> new ResourceDatabasePopulator(
+                new ClassPathResource("db/migration/V2__agent_mysql.sql"),
+                new ClassPathResource("db/migration/V3__knowledge_rag_mysql.sql"))
                 .execute(agentDataSource);
     }
 }

@@ -12,7 +12,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class AgentOrchestrator {
@@ -39,6 +41,27 @@ public class AgentOrchestrator {
     }
 
     public AgentChatResult chat(String content, String conversationId, String runId) {
+        return chatInternal(content, conversationId, runId, null);
+    }
+
+    public AgentChatResult chatWithKnowledgeContext(String content, String conversationId, String runId,
+                                                    List<RetrievedKnowledgeContext> contexts) {
+        return chatInternal(new KnowledgeContextPromptAssembler().assemble(content, contexts), conversationId, runId);
+    }
+
+    public AgentChatResult chatWithKnowledgeResult(String content, String conversationId, String runId,
+                                                   List<RetrievedKnowledgeContext> contexts,
+                                                   com.wimone.enjoytix.agent.knowledge.retrieval.KnowledgeRetrievalResult retrievalResult) {
+        return chatInternal(new KnowledgeContextPromptAssembler().assemble(content, contexts, retrievalResult),
+                conversationId, runId, retrievalResult);
+    }
+
+    private AgentChatResult chatInternal(String content, String conversationId, String runId) {
+        return chatInternal(content, conversationId, runId, null);
+    }
+
+    private AgentChatResult chatInternal(String content, String conversationId, String runId,
+                                         com.wimone.enjoytix.agent.knowledge.retrieval.KnowledgeRetrievalResult retrievalResult) {
         if (content == null || content.isBlank()) {
             throw new IllegalArgumentException("content must not be blank");
         }
@@ -53,8 +76,14 @@ public class AgentOrchestrator {
                 List<String> calledTools = workflow.toolNames();
                 String answer = responsePolicy.answer(response.content(), calledTools, toolResults);
                 String confirmationResponse = confirmationResponse(answer, calledTools, toolResults);
+                if (retrievalResult == null) {
+                    return new AgentChatResult(answer, workflow.conversationId(), workflow.runId(), "COMPLETED",
+                            calledTools, confirmationResponse, workflow.toolResults());
+                }
+                Map<String, String> ragMetadata = new HashMap<>(retrievalResult.metadata());
+                ragMetadata.putIfAbsent("outcome", retrievalResult.outcome().name());
                 return new AgentChatResult(answer, workflow.conversationId(), workflow.runId(), "COMPLETED",
-                        calledTools, confirmationResponse, workflow.toolResults());
+                        calledTools, confirmationResponse, workflow.toolResults(), retrievalResult.citations(), ragMetadata);
             }
             workflow = workflow.appendAssistant(response.content(), response.toolCalls());
             for (AgentToolCall call : response.toolCalls()) {
