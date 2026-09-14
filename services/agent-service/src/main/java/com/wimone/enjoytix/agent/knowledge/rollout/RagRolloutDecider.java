@@ -34,6 +34,14 @@ public final class RagRolloutDecider {
         return bucket(user.userId(), cohortKey) < percentage;
     }
 
+    public boolean isRollback() {
+        return properties.isRollback();
+    }
+
+    public boolean isConfiguredEnabled() {
+        return properties.isEnabled();
+    }
+
     private Set<Long> internalUserIds() {
         return Arrays.stream(properties.getInternalUserIds().split(","))
                 .map(String::trim)

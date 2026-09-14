@@ -81,14 +81,31 @@ public final class AuthorizedKnowledgeRetrievalService {
         }
         List<KnowledgeCitation> citations = citationAssembler.assemble(finalDocuments.stream()
                 .limit(Math.min(request.topK(), properties.getTopK())).toList(), scopes);
+        List<KnowledgeRetrievedContext> contexts = finalDocuments.stream()
+                .limit(Math.min(request.topK(), properties.getTopK()))
+                .map(document -> toContext(document, citations))
+                .filter(Objects::nonNull)
+                .toList();
         KnowledgeRetrievalResult result = citations.isEmpty()
                 ? KnowledgeRetrievalResult.noHit()
                 : KnowledgeRetrievalResult.success(citations,
                 Map.of("candidateCount", String.valueOf(authorized.size()),
-                        "finalCount", String.valueOf(citations.size())));
+                        "finalCount", String.valueOf(citations.size())), contexts);
         return observed(result, authorized.size(), citations.size(), started);
     }
 
+    private KnowledgeRetrievedContext toContext(Document document, List<KnowledgeCitation> citations) {
+        String documentId = String.valueOf(document.getMetadata().get("documentId"));
+        String chunkId = String.valueOf(document.getMetadata().get("chunkId"));
+        String citationKey = citations.stream()
+                .filter(citation -> citation.documentId().equals(documentId) && citation.chunkId().equals(chunkId))
+                .map(KnowledgeCitation::citationKey).findFirst().orElse(null);
+        if (citationKey == null || document.getText() == null || document.getText().isBlank()) return null;
+        return new KnowledgeRetrievedContext(citationKey,
+                String.valueOf(document.getMetadata().getOrDefault("title", citationKey)),
+                String.valueOf(document.getMetadata().getOrDefault("sourceLocation", "knowledge")),
+                document.getText());
+    }
     private KnowledgeRetrievalResult observed(KnowledgeRetrievalResult result, int candidates,
                                               int finals, long started) {
         observer.record(new KnowledgeRetrievalObservation(result.outcome(), candidates, finals,

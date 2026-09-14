@@ -1,20 +1,4 @@
-# AI Workflow Foundation Specification
-
-## Purpose
-
-Defines application-owned conversation and run state so the assistant can evolve from single-agent tool calling to graph-based workflows without breaking external contracts.
-
-## Requirements
-
-### Requirement: Conversation state is independent from model implementation
-
-The AI service MUST represent conversation and run state using application-owned identifiers and DTOs so that the initial ChatClient flow can later be mapped to Spring AI Alibaba Graph nodes without changing external API contracts.
-
-#### Scenario: Continue a conversation
-
-- **WHEN** a valid conversation identifier is supplied
-- **THEN** the service restores the permitted conversation context and continues the run
-- **AND** the model provider remains an internal implementation detail
+## MODIFIED Requirements
 
 ### Requirement: Workflow execution is observable
 
@@ -37,13 +21,3 @@ Each AI run MUST expose correlation information and execution status suitable fo
 - **WHEN** RAG is disabled, the request is outside the cohort, rollback is active, or retrieval fails
 - **THEN** the run records the selected pre-RAG path and a bounded fallback reason
 - **AND** the existing run and purchase correlation identifiers remain available
-
-### Requirement: Graph adoption is incremental
-
-The initial release MUST use single-agent tool calling and MUST preserve explicit seams for a later Graph Workflow implementation.
-
-#### Scenario: Graph workflow is not enabled
-
-- **WHEN** graph mode is disabled by configuration
-- **THEN** the existing single-agent flow remains the active execution path
-- **AND** existing conversational and purchase contracts remain compatible

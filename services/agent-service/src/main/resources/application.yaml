@@ -20,6 +20,7 @@ agent:
     connect-timeout: ${AGENT_MODEL_CONNECT_TIMEOUT:3s}
     read-timeout: ${AGENT_MODEL_READ_TIMEOUT:60s}
     max-tool-rounds: ${AGENT_MODEL_MAX_TOOL_ROUNDS:3}
+    output-cost-per-1k-tokens: ${AGENT_MODEL_OUTPUT_COST_PER_1K_TOKENS:0}
   knowledge:
     rag:
       indexing-enabled: ${AGENT_KNOWLEDGE_RAG_INDEXING_ENABLED:false}

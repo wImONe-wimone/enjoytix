@@ -28,6 +28,8 @@ public class AgentApplicationService {
     private final RunRepository runs;
     private final AgentOrchestrator orchestrator;
     private final boolean toolCallingEnabled;
+    @Value("${agent.model.output-cost-per-1k-tokens:0}")
+    private double outputCostPerThousandTokens;
     private final AgentModelErrorClassifier modelErrorClassifier = new AgentModelErrorClassifier();
 
     public AgentApplicationService(ConversationRepository repository,
@@ -112,7 +114,10 @@ public class AgentApplicationService {
             repository.append(id, new AgentMessage("assistant", result, Instant.now()));
             runs.save(run.complete(Instant.now()));
             meters.counter("enjoytix.agent.model.calls", "status", "success").increment();
-            meters.counter("enjoytix.agent.model.tokens", "type", "output").increment(estimateTokens(result));
+            long outputTokens = estimateTokens(result);
+            meters.counter("enjoytix.agent.model.tokens", "type", "output").increment(outputTokens);
+            meters.summary("enjoytix.agent.model.cost.estimated", "type", "output")
+                    .record(outputTokens * outputCostPerThousandTokens / 1000.0);
             listener.onEvent(new AgentStreamEvent("answer.completed", result));
         } catch (RuntimeException ex) {
             AgentModelFailure failure = modelErrorClassifier.classify(ex);
