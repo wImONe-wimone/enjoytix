@@ -46,6 +46,48 @@ class KnowledgeRetrievalQualityEvaluatorTest {
         assertThat(report.thresholdsMet()).isFalse();
     }
 
+    @Test
+    void failsFirstRankGateWhenRelevantCitationIsNotFirst() {
+        RagProperties properties = new RagProperties();
+        properties.setEvaluationRankingThreshold(1.0);
+        KnowledgeRetrievalQualityEvaluator evaluator = new KnowledgeRetrievalQualityEvaluator(properties);
+
+        KnowledgeRetrievalQualityReport report = evaluator.evaluate(List.of(
+                new KnowledgeRetrievalQualityCase("q1", Set.of("cite-1"),
+                        KnowledgeRetrievalResult.success(List.of(citation("cite-2", 0.95), citation("cite-1", 0.8)), Map.of()))));
+
+        assertThat(report.rankingAccuracy()).isZero();
+        assertThat(report.thresholdsMet()).isFalse();
+    }
+
+    @Test
+    void failsCitationCoverageGateWhenReturnedCitationsIncludeIrrelevantResults() {
+        RagProperties properties = new RagProperties();
+        properties.setEvaluationCitationCoverageThreshold(1.0);
+        KnowledgeRetrievalQualityEvaluator evaluator = new KnowledgeRetrievalQualityEvaluator(properties);
+
+        KnowledgeRetrievalQualityReport report = evaluator.evaluate(List.of(
+                new KnowledgeRetrievalQualityCase("q1", Set.of("cite-1"),
+                        KnowledgeRetrievalResult.success(List.of(citation("cite-1", 0.95), citation("cite-2", 0.8)), Map.of()))));
+
+        assertThat(report.citationCoverage()).isEqualTo(0.5);
+        assertThat(report.thresholdsMet()).isFalse();
+    }
+
+    @Test
+    void failsNoHitPrecisionGateWhenUnexpectedResultsAreReturned() {
+        RagProperties properties = new RagProperties();
+        properties.setEvaluationNoHitPrecisionThreshold(1.0);
+        KnowledgeRetrievalQualityEvaluator evaluator = new KnowledgeRetrievalQualityEvaluator(properties);
+
+        KnowledgeRetrievalQualityReport report = evaluator.evaluate(List.of(
+                new KnowledgeRetrievalQualityCase("q1", Set.of(),
+                        KnowledgeRetrievalResult.success(List.of(citation("cite-1", 0.95)), Map.of()))));
+
+        assertThat(report.noHitPrecision()).isZero();
+        assertThat(report.thresholdsMet()).isFalse();
+    }
+
     private KnowledgeCitation citation(String key, double score) {
         return new KnowledgeCitation(key, "kb-1", "doc-1", "v1", key, "Policy", "policy.md", score);
     }

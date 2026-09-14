@@ -1,0 +1,125 @@
+name: rag-quality-evaluation
+
+on:
+  push:
+    paths:
+      - 'services/agent-service/**'
+      - 'tools/ragas-evaluation/**'
+      - '.github/workflows/rag-quality-evaluation.yml'
+  pull_request:
+    paths:
+      - 'services/agent-service/**'
+      - 'tools/ragas-evaluation/**'
+      - '.github/workflows/rag-quality-evaluation.yml'
+  workflow_dispatch:
+    inputs:
+      semantic_thresholds:
+        description: 'Comma-separated metric=value thresholds; empty keeps semantic metrics baseline-only'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    env:
+      SEMANTIC_THRESHOLDS: ${{ github.event.inputs.semantic_thresholds || '' }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Run Java evaluation tests
+        run: mvn -pl services/agent-service -am test -Dtest=Evaluation*Test,RetrievalEvaluationCaseTest,KnowledgeRetrievalQualityEvaluatorTest -Dsurefire.failIfNoSpecifiedTests=false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install offline runner
+        working-directory: tools/ragas-evaluation
+        run: |
+          python -m pip install --requirement requirements.lock
+          python -m pip install --no-deps .
+
+      - name: Run Python runner tests
+        working-directory: tools/ragas-evaluation
+        run: python -m pytest tests -q
+
+      - name: Run controlled baseline evaluation
+        working-directory: tools/ragas-evaluation
+        env:
+          RAGAS_EVALUATOR_MODE: mock
+          RAGAS_EVALUATOR_MODEL: ci-offline-model
+          RAGAS_MOCK_CONTEXT_PRECISION: '1.0'
+          RAGAS_MOCK_CONTEXT_RECALL: '1.0'
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+          import tempfile
+          from pathlib import Path
+
+          dataset = {
+              'schemaVersion': '1',
+              'datasetVersion': 'ci-1',
+              'caseId': 'ci-positive',
+              'query': 'controlled evaluation query',
+              'subjectProfileId': 'ci-subject',
+              'expectedOutcome': 'SUCCESS',
+              'expectedCitationKeys': ['ci-citation'],
+              'referenceAnswer': 'controlled evaluation answer',
+              'tags': ['ci'],
+          }
+          evidence = {
+              'contractVersion': '1',
+              'datasetId': 'ci',
+              'datasetVersion': 'ci-1',
+              'caseId': 'ci-positive',
+              'retrievalOutcome': 'SUCCESS',
+              'citations': [{'citationKey': 'ci-citation', 'knowledgeBaseId': 'ci-kb', 'documentId': 'ci-doc', 'versionId': 'ci-v1', 'chunkId': 'ci-chunk', 'rank': 1, 'score': 1.0}],
+              'contexts': [{'citationKey': 'ci-citation', 'content': 'controlled evaluation context'}],
+              'candidateCount': 1,
+              'finalCount': 1,
+              'retrievalDurationMillis': 1,
+              'retrievalConfiguration': {'retrievalEnabled': True, 'rerankingEnabled': False, 'topK': 1, 'candidateLimit': 1, 'minimumScore': 0.0, 'embeddingModel': 'ci-embedding', 'embeddingDimension': 1},
+              'deterministicResult': {'metricVersion': '1', 'recallAtK': 1.0, 'rankingAccuracy': 1.0, 'citationCoverage': 1.0, 'noHitPrecision': 1.0, 'thresholdsMet': True},
+              'failure': None,
+          }
+          with tempfile.TemporaryDirectory() as temporary:
+              root = Path(temporary)
+              dataset_path = root / 'ci.jsonl'
+              evidence_path = root / 'evidence.jsonl'
+              dataset_path.write_text(json.dumps(dataset) + '\n', encoding='utf-8')
+              evidence_path.write_text(json.dumps(evidence) + '\n', encoding='utf-8')
+              output_dir = Path('reports')
+              command = ['ragas-evaluate', '--dataset', str(dataset_path), '--evidence', str(evidence_path), '--output-dir', str(output_dir)]
+              for threshold in filter(None, os.environ.get('SEMANTIC_THRESHOLDS', '').split(',')):
+                  command.extend(['--semantic-threshold', threshold])
+              result = subprocess.run(command, check=False)
+              if result.returncode not in (0, 4):
+                  raise SystemExit(result.returncode)
+              report = json.loads((output_dir / 'report.json').read_text(encoding='utf-8'))
+              if report['gateOutcome'] != ('FAIL' if result.returncode == 4 else 'PASS'):
+                  raise SystemExit('report outcome does not match CLI exit code')
+          PY
+
+      - name: Upload sanitized reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rag-quality-sanitized-reports
+          path: tools/ragas-evaluation/reports/
+          if-no-files-found: ignore
+          retention-days: 7

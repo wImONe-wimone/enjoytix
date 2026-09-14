@@ -41,3 +41,12 @@ build/
 
 ### Runtime logs ###
 deploy/enjoytix-nginx-1.25.4/logs/
+
+### Offline RAG evaluation artifacts ###
+tools/ragas-evaluation/.venv/
+tools/ragas-evaluation/raw-evidence/
+tools/ragas-evaluation/output/
+tools/ragas-evaluation/reports/
+tools/ragas-evaluation/*.egg-info/
+**/__pycache__/
+.pytest_cache/
